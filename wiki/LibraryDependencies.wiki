@@ -56,7 +56,7 @@ This is the AAC decoder that seems to work best with Remote Play.  I'm using thi
 
 Source: http://www.ffmpeg.org/
 
-The ORP project requires FFmpeg for audio and video decode.  The following codecs required:
+The ORP project requires FFmpeg for audio and video decode.  The following codecs are required:
   * AAC (libfaad)
   * MPEG4 (mpeg4, and the m4v muxer)
   * ATRAC3 (atrac3)
@@ -70,3 +70,9 @@ Source: http://www.mingw.org/
 See this [http://ffmpeg.arrozcru.org/wiki/index.php?title=Main_Page guide] for more information.
 
 I have not tried using the available FFmpeg DLLs.  Namely because the built-in AAC decoder doesn't seem to work.  However, before install MinGW and building FFmpeg from source, someone should try using the pre-compiled DLLs.  They may work *much* better than building from source.
+
+== wxWidgets ==
+
+Source: http://wxwidgets.org/
+
+The GUI front-end uses wxWidgets.  Available on all platforms as source code or pre-compiled libraries.
