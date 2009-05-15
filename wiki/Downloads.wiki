@@ -1,5 +1,3 @@
-#summary Download releases.
+= Official Downloads & Releases =
 
-= Downloads =
-
-All releases are available from PS3-Hacks.com:  http://ps3-hacks.com
+All official releases are available at PS3-Hacks.com:  http://ps3-hacks.com
