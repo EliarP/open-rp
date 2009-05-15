@@ -1,10 +1,11 @@
 #summary README
 #labels Phase-Deploy
-{{{
+<pre>
                              Open Remote Play BETA
 -------------------------------------------------------------------------------
                           Brought to you by Dashhacker
                               http://ps3-hacks.com
+
 		       http://code.google.com/p/open-rp/
 
 Wouldn't it be cool if you could run Remote Play from your laptop, desktop, or
@@ -96,4 +97,4 @@ TODO
 -------------------------------------------------------------------------------
 
 http://code.google.com/p/open-rp/wiki/TODO
-}}}
+</pre>
