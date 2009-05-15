@@ -1,8 +1,8 @@
-#summary Project TODO list, stuff not yet implemented.
-
-This is the OpenRP TODO list.  This list does *not* contain bugs.  See the _Issues_ section to view or post bugs.
+#summary OpenRP TODO list, stuff not yet implemented.
 
 = TODO =
+
+This is the OpenRP TODO list.  This list does *not* contain bugs.  See the _Issues_ section to view or post bugs.
 
   * BETA release binary build for Windows.
   * Add joystick support with a default SIXAXIS/DS3 button map.
