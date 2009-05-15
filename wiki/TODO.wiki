@@ -11,4 +11,3 @@ This is the OpenRP TODO list.  This list does *not* contain bugs.  See the _Issu
   * Add error messages to the player instead of just bailing silently.
   * Implement power-on support.
   * Clean-up and document API.
-  * Release source code.
