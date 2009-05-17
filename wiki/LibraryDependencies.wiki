@@ -72,5 +72,3 @@ I have not tried using the available FFmpeg DLLs.  Namely because the built-in A
 Source: http://wxwidgets.org/
 
 The GUI front-end uses wxWidgets.  Available on all platforms as source code or pre-compiled libraries.
-
-#summary Required libraries and tools to build ORP from source.
