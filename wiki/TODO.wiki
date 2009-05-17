@@ -1,3 +1,4 @@
+#labels Phase-Requirements,Phase-Design
 This is the OpenRP TODO list.  This list does *not* contain bugs.  See the _Issues_ section to view or post bugs.
 
   * Add joystick support with a default SIXAXIS/DS3 button map.
