@@ -1,8 +1,4 @@
-#summary Required libraries.
 #labels Phase-Implementation
-
-= Library Dependencies =
-
 Here is the list of packages that are required to build ORP from source.  All of these packages are available for Windows, Mac, and Linux.  Some of these packages can not be built from source under Windows (with MSVC), however, pre-compiled shared library (DLL) versions are available for download.
 
 == Simple Direct Media Library (libSDL) ==
