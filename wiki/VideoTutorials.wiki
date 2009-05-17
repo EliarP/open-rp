@@ -1,5 +1,5 @@
 #summary Video tutorials
-#labels Phase-Deploy,Phase-Support
+#labels Phase-Deploy,Phase-Support,Featured
 
 = Video Tutorials =
 
