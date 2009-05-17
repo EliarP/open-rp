@@ -1,8 +1,4 @@
-#summary Video tutorials
 #labels Phase-Deploy,Phase-Support,Featured
-
-= Video Tutorials =
-
 Here is an excellent video tutorial by [http://www.youtube.com/user/stevesmacfix stevesmacfix].  Thanks Steve!
 
 <wiki:video url=http://www.youtube.com/watch?v=mFctW4Wvdio>
