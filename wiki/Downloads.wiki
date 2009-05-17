@@ -1,1 +1,2 @@
+#labels Phase-Deploy,Featured
 All official releases are available at PS3-Hacks.com: http://www.ps3-hacks.com/tag/open-remote-play/
