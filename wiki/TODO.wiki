@@ -4,6 +4,7 @@ This is the Open Remote Play TODO list.  This list does *not* contain bugs, only
   * Add better sampling of analog stick movement instead of: Sint16 % 128
   * Add support for the right analog stick.
   * Add proper audio+video synchronization (added a quick hack for now).
+    * http://www.dranger.com/ffmpeg/tutorial05.html
   * Add ability to set/manage buffering and bit-rate profiles.
   * Add error messages to the player instead of just bailing silently.
   * Implement power-on support.
