@@ -1,6 +1,7 @@
 #labels Featured
 == Open Remote Play v1.2 ==
- * Added support for digital-only SIXAXIS/DS3 USB controller.
+ * Added support for left analog stick.
+ * Added support for all SIXAXIS/DS3 buttons.
  * Added mouse support.
  * Added SELECT (F3) and START (F4) keyboard mappings.
  * Fixed CTRL-key issues, thanks to lethalwp for the patch.
