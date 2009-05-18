@@ -1,7 +1,7 @@
 #labels Phase-Requirements,Phase-Design,Featured
 This is the Open Remote Play TODO list.  This list does *not* contain bugs, only features and functionality that has yet to be implemented.  See the _Issues_ section to view or post bugs.
 
-  * Add analog support for SIXAXIS/DS3 controller.
+  * Add support for the right analog stick.
   * Add proper audio+video synchronization (added a quick hack for now).
   * Add ability to set/manage buffering and bit-rate profiles.
   * Add error messages to the player instead of just bailing silently.
