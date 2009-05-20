@@ -58,6 +58,12 @@ The ORP project requires FFmpeg for audio and video decode.  The following codec
   * ATRAC3 (atrac3)
   * AVC (h264)
 
+== OpenSSL (libcrypto) ==
+
+Source: http://www.openssl.org/
+
+Open Remote Play depends on AES CBC support from the OpenSSL library, libcrypto specifically.
+
 == MinGW (Windows only) ==
 
 Source: http://www.mingw.org/
