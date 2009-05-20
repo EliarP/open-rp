@@ -1,7 +1,6 @@
 #labels Featured
 == Open Remote Play v1.2 ==
- * Mouse motion events are now sent only while holding the ALT key down from within
-full-screen mode.
+ * Mouse motion events are now sent only while holding the ALT key down from within full-screen mode.
  * Increased the 'dead-zone' of the analog stick input resulting in less jumpy values, but  still not perfect.
  * Vastly improved full-screen mode. Scales video to desktop resolution, much faster and now works as expected under Windows.
  * Added proper padding for audio/video packets. This fixes the random read access violation crashes under Windows.
