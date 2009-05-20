@@ -1,6 +1,8 @@
 #labels Phase-Requirements,Phase-Design,Featured
 This is the Open Remote Play TODO list.  This list does *not* contain bugs, only features and functionality that has yet to be implemented.  See the _Issues_ section to view or post bugs.
 
+  * Add custom keyboard and joystick configuration.
+    * http://code.google.com/p/open-rp/issues/detail?id=12
   * Add better sampling of analog stick movement instead of: Sint16 % 128
   * Add support for the right analog stick.
   * Add proper audio+video synchronization (added a quick hack for now).
