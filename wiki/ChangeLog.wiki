@@ -1,13 +1,12 @@
 #labels Featured
 == Open Remote Play v1.2 ==
  * Mouse motion events are now sent only while holding the ALT key down from within full-screen mode.
- * Increased the 'dead-zone' of the analog stick input resulting in less jumpy values, but  still not perfect.
  * Vastly improved full-screen mode. Scales video to desktop resolution, much faster and now works as expected under Windows.
  * Added proper padding for audio/video packets. This fixes the random read access violation crashes under Windows.
  * Switched to AVPacket structures in preparation for implementing proper audio/video synchronization (PTS/DTS).
  * Added PS3 'chime' sample which plays when a connection has been established.
  * Fixed missing windows icon.
- * Added support for left analog stick.
+ * Added support for left and right analog sticks.
  * Added support for all SIXAXIS/DS3 buttons.
  * Added mouse support.
  * Added SELECT (F3) and START (F4) keyboard mappings.
