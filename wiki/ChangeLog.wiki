@@ -1,5 +1,6 @@
 #labels Featured
 == Open Remote Play v1.2 ==
+ * Fixed Edit profile page height under Windows.  Save, Delete, and Cancel buttons are now visible.
  * Mouse motion events are now sent only while holding the ALT key down from within full-screen mode.
  * Vastly improved full-screen mode. Scales video to desktop resolution, much faster and now works as expected under Windows.
  * Added proper padding for audio/video packets. This fixes the random read access violation crashes under Windows.
