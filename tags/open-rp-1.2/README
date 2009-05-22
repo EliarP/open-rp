@@ -1,0 +1,135 @@
+                             Open Remote Play BETA
+-------------------------------------------------------------------------------
+                          Brought to you by Dashhacker
+                              http://ps3-hacks.com
+		       http://code.google.com/p/open-rp/
+
+Wouldn't it be cool if you could run Remote Play from your laptop, desktop, or
+perhaps your phone?
+
+After 2 weeks of hardcore reverse-engineering, now you can!
+
+I would like to thank Dark_AleX for hacking the PSP.  Without his work, ORP
+would not be possible.  I would also like to thank TyRaNiD for psplink and
+prxtool.  Using psplink makes this type of work almost painless!  Thanks to
+jas0nuk for the essential PRXdecrypter utility.
+
+Controls
+-------------------------------------------------------------------------------
+
+If you connect your SIXAXIS or DualShock 3 controller to your PC *before* you
+start Open Remote Play, it should be detected and automatically configured.
+Remember to press the PlayStation button to activate the controller.
+
+For Windows users, you require to download and install the DualShock driver:
+  http://www.motioninjoy.com/
+
+Ensure that the controller is functioning properly by testing it using the
+Game Controllers program found in the Control Panel.
+
+The player currently implements these keyboard mappings:
+
+ENTER           X
+F1              Triangle
+F2              Square
+F3              Select
+F4              Start
+ESCAPE          Circle
+PAGE-UP         L1
+PAGE-DOWN       R1
+ARROW KEYS      D-Pad
+HOME            PS Button
+
+CTRL-D		Toggle through window sizes (normal, medium, and large)
+CTRL-F		Enter/exit full-screen mode
+CTRL-Q          Quit Remote Play
+
+Not implemented, yet:
+The right/left analog sticks, L2, R2, L3, and R3.
+
+NOTE: On Apple laptops, you may have to hold down the Fn key to access some of
+the above keys.
+
+The player currently implements the following mouse support:
+
+While in full-screen mode, mouse motion deltas are sent as PSP D-Pad events
+while the ALT key is held down.  In window-mode, mouse motion does nothing.
+The mouse buttons are mapped the same as when you plug a USB mouse in to the
+PS3:
+
+LEFT BUTTON	X
+RIGHT BUTTON	Triangle
+MIDDLE BUTTON	Home
+
+WHEEL UP	D-Pad Up
+WHEEL DOWN	D-Pad Down
+
+Configuration
+-------------------------------------------------------------------------------
+
+You require a PlayStation Portable (or access to one), that is able to run
+homebrew software.
+
+After installing the application on your PC, you need to import existing RP
+settings from a registered PSP.  The steps are as follows:
+
+1 - If you have not done so already, register your PSP with your PS3 for
+    Remote Play.
+
+2 - Copy the ORP_Export folder to your PSP under /PSP/GAME
+
+3 - Run Open Remote Play Export on your PSP.  This will create a file on the
+    memory stick called export.orp.  Copy this file to your PC.
+
+4 - Run the ORP GUI and click on Import, locate and import export.orp.  You
+    will have to manually change the IP address of your PS3, by default it
+    will be set to 0.0.0.0.  I keep two profiles, one for local LAN and
+    another for when I'm connecting from the Internet.  You can create
+    multiple profiles by simply changing the Name field and clicking Save.
+
+5 - Click Import again, this time locate and import keys.orp.  You only have
+    to do this once for a new installation, or if there is a key update.
+
+6 - Select a profile, cross your fingers, and click Launch!
+
+Compilation
+-------------------------------------------------------------------------------
+
+The "build system" (if you can call it that) is very simple.  For the player
+and the GUI, edit the Makefile in each and uncomment the platform you wish to
+build for.  For the GUI, ensure there are config sym-links:
+
+        ./config.h -> ../config.h
+        ./config.cpp -> ../config.cpp
+
+If you'll be running the GUI from the gui directory, ensure you have created a
+sym-link back to the player:
+
+        ./orp -> ../orp
+
+If you change any of the logos or images, run make images to generate the
+required header file.
+
+The psp directory contains the RP key export utility.  This requires the PSPSDK
+to be installed and the $PSPDEV environment variable to be set accordingly.
+
+The keys directory contains a simple tool to save the 3 RP static keys (only 2
+are used).  I've seperated the these keys in to the configuration file in case
+we need to update them in the future.  You need to import keys.orp using the
+GUI before using ORP for the first time.
+
+Known Issues
+-------------------------------------------------------------------------------
+
+http://code.google.com/p/open-rp/issues/list
+
+Change Log
+-------------------------------------------------------------------------------
+
+http://code.google.com/p/open-rp/wiki/ChangeLog
+
+TODO
+-------------------------------------------------------------------------------
+
+http://code.google.com/p/open-rp/wiki/TODO
+
