@@ -1,4 +1,7 @@
 #labels Featured
+== Open Remote Play v1.3 ==
+ * Added preliminary a/v sync.  Video is now synchronized with the audio clock.
+ 
 == Open Remote Play v1.2 ==
  * Fixed Edit profile page height under Windows.  Save, Delete, and Cancel buttons are now visible.
  * Mouse motion events are now sent only while holding the ALT key down from within full-screen mode.
