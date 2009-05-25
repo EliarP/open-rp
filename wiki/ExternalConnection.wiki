@@ -5,7 +5,7 @@ First ensure that you've enable port-forwarding for TCP and UDP 9293 to the inte
 Since Open Remote Play version 1.1, when game launching was added, you can no longer establish an external connection by simply port-forwarding TCP 9293 to your !PlayStation 3.  The UDP portion of the protocol uses UDP 9293 and should be easy to forward.  However the problem is that Sony designed the protocol so that external connections come in via the PSN.  So what they've done is set the TTL of the !PlayStation 3 UDP reply packets to 1. This means that the replies will never make it back to you across the Internet as they can not cross more than one router/gateway before being discarded.
 
 == Solutions ==
-There are three solutions and unfortunately, none of them are that easy.  Listed below in order of difficulty, from most to least difficult:
+There are three solutions and unfortunately, none of them are that easy.  Listed below in order of difficulty, from least to most difficult:
 
  * Set-up a VPN between your laptop/desktop to home.
  I won't go in to detail, you can find many guides and software on-line about this.
