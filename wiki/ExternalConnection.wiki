@@ -9,7 +9,7 @@ There are three solutions and unfortunately, none of them are that easy.  Listed
  I won't go in to detail, you can find many guides and software on-line about this.
 
  * For those who are running more advanced firewall/gateways, there is a simple solution.
- Increase the UDP packet's TTL.  The example I'll give here is specific to IPtables, but can be easily translated to other firewall types.  Your firewall requires the TTL module.  If it's not already loaded:
+ Increase the UDP packet's TTL.  The example I'll give here is specific to IPtables, but can be easily translated to other firewall types.  Your firewall requires the TTL module.  If you use OpenWRT, you'll need to install the iptables-extra package first.  Load the module if it's not already loaded:
 
  {{{# insmod ipt_TTL}}}
 
