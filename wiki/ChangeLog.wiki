@@ -1,5 +1,6 @@
 #labels Featured
 == Open Remote Play v1.3 ==
+ * Added "Disable UDP Search" check-box and configuration option for external connections where the TTL can not be changed.  This will also disable game launching.
  * Added preliminary a/v sync.  Video is now synchronized with the audio clock.
  
 == Open Remote Play v1.2 ==
