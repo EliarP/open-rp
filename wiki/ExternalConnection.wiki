@@ -23,4 +23,4 @@ There are three solutions and unfortunately, none of them are that easy.  Listed
  I may get around to this at some point.  I've already looked at it a little, and it's fairly complicated.  At the moment, I have more important things on the TODO list to complete first.  If someone else out there wants to take a stab at it... :)
 
  * I know I said there were only three solutions, but here is another.  It's not a real solution because it means that game launching will not work across the Internet.
- Add a check-box to the profile edit page for external connections which would disable the UDP portion of the protocol and connect directly to TCP 9293.  This would at least allow access to the XMB.
+ Add a check-box to the profile edit page for external connections which would disable the UDP portion of the protocol and connect directly to TCP 9293.  This would at least allow access to the XMB.  *NOTE:* This has been implemented in SVN trunk.
