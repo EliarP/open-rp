@@ -8,6 +8,7 @@ This is the Open Remote Play TODO list.  This list does *not* contain bugs, only
   * Add ability to set/manage buffering and bit-rate profiles.
   * Add error messages to the player instead of just bailing silently.
   * Implement power-on support.
-    * Requires sending a UDP packet to the PS3 with the PSP MAC address as the spoofed source.
+    * ~~Requires sending a UDP packet to the PS3 with the PSP MAC address as the spoofed source.~~
+    * Requires WoL packet to be sent to port 9293.  Easy to implement.
   * Clean-up and document API.
   * Port to iPhone?
