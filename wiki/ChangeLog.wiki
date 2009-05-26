@@ -1,5 +1,6 @@
 #labels Featured
 == Open Remote Play v1.3 ==
+ * Added Wake-on-LAN (WoL) support.  You can now turn on your PS3 remotely.
  * Added keys to toggle through three bit-rates: 384k, 768k, and 1024k
  * Added "Disable UDP Search" check-box and configuration option for external connections where the TTL can not be changed at the gateway/firewall.  This will also disable game launching.
  * Added preliminary a/v sync.  Video is now synchronized with the audio clock.
