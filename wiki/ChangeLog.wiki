@@ -1,5 +1,6 @@
 #labels Featured
 == Open Remote Play v1.3 ==
+ * Fixed the annoying MacOSX input lag.
  * Added "virtual keyboard" mode.  Thanks to MohammadAG for the idea!
  * Added Wake-on-LAN (WoL) support.  You can now turn on your PS3 remotely.
  * Added keys to toggle through three bit-rates: 384k, 768k, and 1024k
