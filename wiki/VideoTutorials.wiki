@@ -5,6 +5,6 @@ Here is an excellent video tutorial by [http://www.youtube.com/user/stevesmacfix
 <wiki:video width=640 height=385 url=http://www.youtube.com/watch?v=mFctW4Wvdio>
 
 ===Windows===
-Another great tutorial, this one for Windows.  Thanks to [http://www.youtube.com/user/Kerpaltheballer Kerpaltheballer]
+Another great tutorial, this one for Windows.  Thanks to [http://www.youtube.com/user/Kerpaltheballer Kerpaltheballer]!
 
 <wiki:video width=640 height=385 url=http://www.youtube.com/watch?v=QIDTO9PdopY>
