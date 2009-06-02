@@ -46,15 +46,15 @@ Source: http://curl.haxx.se/libcurl/
 
 libCURL handles 99% of the Remote Play HTTP protocol.  The remaining 1% (sending "pad" data - see above), is handled directly.
 
+Under Windows, you should apply the following patch to fix a bug where libCURL exits from socket reads upon receiving SIGINT:
+
+http://code.google.com/p/open-rp/source/browse/trunk/patches/curl-7.19.4-EINTR.patch
+
 == libfaad2 ==
 
 Source: http://www.audiocoding.com/faad2.html
 
 This is the AAC decoder that seems to work best with Remote Play.  I'm using this rather than the built-in FFmpeg version because the built-in version doesn't work at all (latest SVN).  Install this first, and then when you build FFmpeg, enable the libfaad codec.
-
-Under Windows, you should apply the following patch to fix a bug where libCURL exits from socket reads upon receiving SIGINT:
-
-http://code.google.com/p/open-rp/source/browse/trunk/patches/curl-7.19.4-EINTR.patch
 
 == FFmpeg ==
 
