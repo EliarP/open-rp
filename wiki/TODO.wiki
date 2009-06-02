@@ -8,4 +8,4 @@ This is the Open Remote Play TODO list.  This list does *not* contain bugs, only
   * Add ability to set/manage buffering and bit-rate profiles.
   * Add error messages to the player instead of just bailing silently.
   * Clean-up and document API.
-  * Port to iPhone?
+  * Port to iPhone and/or Android?
