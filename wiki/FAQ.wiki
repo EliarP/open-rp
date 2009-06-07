@@ -12,13 +12,16 @@
 
  First, ensure you have Remote Start enabled.  Go to:
   Settings > Remote Play > Remote Start
+
+ Choose On, check the Enable Remote Start via the Internet box, and then click on OK.  
+
+ NOTE: Depending on how long your PS3 has been off, your Internet gateway/router may have cleared the PS3's ARP address from the cache.  When this happens, the gateway/router will not forward incoming Wake-on-LAN (WoL) packets to your PS3.  You can over come this problem if you can save a _static_ ARP entry.  For example, under most Unix-based operating systems, the command would be similar to (substitue XXX.XXX.XXX.XXX and FF:FF:FF:FF:FF:FF with the IP address and MAC address of your PS3, and eth0 with the appropriate interface):
+
+  <pre> # arp -s XXX.XXX.XXX.XXX FF:FF:FF:FF:FF:FF</pre>
+  Or
+  <pre> # ip neigh add XXX.XXX.XXX.XXX lladdr FF:FF:FF:FF:FF:FF nud permanent dev eth0</pre>
+
  Second, ensure you're Internet firewall/gateway either has UPnP enabled, or that you have manually port forwarded 9293 (TCP and UDP) to the PS3's IP address.  If you are at home, on your LAN, then ensure you have selected "Enable WoL Reflector" from the Edit page for your PS3 settings.
-
- Choose On, check the Enable Remote Start via the Internet box, and then click on OK.  *NOTE*: Depending on how long your PS3 has been off, your Internet gateway/router may have cleared the PS3's ARP address from the cache.  When this happens, the gateway/router will not forward incoming Wake-on-LAN (WoL) packets to your PS3.  You can over come this problem if you can save a _static_ ARP entry.  For example, under most Unix-based operating systems, the command would be similar to (substitue XXX.XXX.XXX.XXX and FF:FF:FF:FF:FF:FF with the IP address and MAC address of your PS3, and eth0 with the appropriate interface):
-
-<pre> # arp -s XXX.XXX.XXX.XXX FF:FF:FF:FF:FF:FF</pre>
-Or
-<pre> # ip neigh add XXX.XXX.XXX.XXX lladdr FF:FF:FF:FF:FF:FF nud permanent dev eth0</pre>
 
 ===How do I turn-off my !PlayStation 3 remotely?===
 
