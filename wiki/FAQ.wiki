@@ -27,3 +27,8 @@
 
  If you wish to turn the PS3 off, go to:
   Users > Turn Off System
+
+===I updated my PS3 to Firmware 2.80, and now ORP crashes===
+
+Sony has changed Remote Play as of 2.80 to require the client's MAC address to match that of the registered PSP's MAC address.  We're still working on a proper solution for this, but in the mean-time you can spoof your PSP's MAC address to get local connections working again.  In Linux, this would look something like (change aa:bb:cc:dd:ee:ff to your PSP's MAC address):
+  <pre> # ifconfig wlan0 hw ether aa:bb:cc:dd:ee:ff</pre>
