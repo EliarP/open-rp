@@ -18,5 +18,5 @@
 
 ===Default Bitrate===
   You may select a default bitrate for each connection profile.  The general rule is Public connections should be set lower, and Private connections should be set to the highest value (1024k).  You can change the bitrate _on-the-fly_ by pressing CTRL+1 (1024k), CTRL+2 (768k), and CTRL+3 (384k) during an active session.</td>
-<td>hi http://code.google.com/p/open-rp/source/browse/wiki/images/orpui-edit.png</td></tr>
+<td>http://open-rp.googlecode.com/svn/wiki/images/orpui-edit.png</td></tr>
 </table>
