@@ -40,17 +40,17 @@ Under Mac OSX, it is critical that you patch SDL_net to fix the key lag issue.  
 
 http://code.google.com/p/open-rp/source/browse/trunk/patches/SDL_net-1.2.7-TCP_NODELAY.patch
 
-== FreeType 2 ==
+== !FreeType 2 ==
 
 Source: http://www.freetype.org/
 
-The Free Type 2 font API is required to display error messages in the player window.  It is used by SDL_ttf.
+The !FreeType 2 font API is required to display error messages in the player window.  It is used by SDL_ttf.
 
 == SDL_ttf ==
 
 Source: http://www.libsdl.org/projects/SDL_ttf/
 
-Portable font rendering library used by the ORP player to display error messages.  Depends on FreeType 2.
+Portable font rendering library used by the ORP player to display error messages.  Depends on !FreeType 2.
 
 == libCURL ==
 
