@@ -1,5 +1,9 @@
 #labels Featured
 == Open Remote Play v1.3 ==
+ * Added default bitrate profile setting.
+ * Fixed threading issue which corrupted AES IV (fixes Windows crashes and video corruption issues).
+ * Added public/private connection types and authentication changes.
+ * Added error messages to the player instead of just bailing silently. 
  * Fixed the annoying MacOSX input lag.
  * Added "virtual keyboard" mode.  Thanks to MohammadAG for the idea!
  * Added Wake-on-LAN (WoL) support.  You can now turn on your PS3 remotely.
