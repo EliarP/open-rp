@@ -4,6 +4,9 @@ Here is an excellent video tutorial by [http://www.youtube.com/user/stevesmacfix
 
 <wiki:video width=640 height=385 url=http://www.youtube.com/watch?v=mFctW4Wvdio>
 
+Here is an awesome MacOSX tutorial in French by Oliver (SkOrTeX):
+[http://www.dailymotion.com/video/x9u1ew_tuto-controler-sa-ps3-avec-un-macbo_videogames Dailymotion]
+
 ===Windows===
 Another great tutorial, this one for Windows.  Thanks to [http://www.youtube.com/user/Kerpaltheballer Kerpaltheballer]!
 
