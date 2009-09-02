@@ -36,5 +36,4 @@ Sony has changed Remote Play as of 2.80 to require the client's MAC address to m
 For OSX, this works similar:
   <pre> # sudo ifconfig en0 lladdr aa:bb:cc:dd:ee:ff</pre>
 
-Thanks to Greg for this, and he notes that:
-  The above doesn't work with the !AirPort (interface en1); so you gotta be wired.
+Apparently this does work with the !AirPort interface (en1), but you have to disassociate first.  See j.altan's comment below.
