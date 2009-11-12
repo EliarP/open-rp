@@ -1,0 +1,11 @@
+#labels Phase-Support
+= Introduction =
+
+Welcome to the Open Remote Play Windows Build Guide.  For those who wish to build (compile) ORP from SVN, this guide is for you.  If you find any errors in this guide, please leave a comment.
+
+= Prerequisites =
+
+You only need two things to start:
+
+  # SVN to download and update the source code.  I use [http://tortoisesvn.tigris.org/ TortoiseSVN].
+  # A complete MINGW32 + MSYS development environment which I have already done for you and can be downloaded [http://orp.ps3-hacks.com/packages/MINGW32-ORP.zip here].
