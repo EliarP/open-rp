@@ -38,7 +38,7 @@ svn checkout http://open-rp.googlecode.com/svn/trunk/ open-rp
 
 {{{
 $ cd open-rp
-$ make
+$ make release
 }}}
 
 = Running ORP =
