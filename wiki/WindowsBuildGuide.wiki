@@ -1,16 +1,16 @@
 #labels Phase-Support
-= Introduction =
+=== Introduction ===
 
 Welcome to the Open Remote Play Windows Build Guide.  For those who wish to build (compile) ORP from SVN, this guide is for you.  If you find any errors in this guide, please leave a comment, or even edit the page yourself.
 
-= Prerequisites =
+=== Prerequisites ===
 
 You only need two things to start:
 
   # SVN to download and update the source code.  I use [http://tortoisesvn.tigris.org/ TortoiseSVN].
   # A complete MINGW32 + MSYS development environment which I have already done for you and can be downloaded [http://orp.ps3-hacks.com/packages/MINGW32-ORP.zip here].
 
-= Installation =
+=== Installation ===
 
   * Install TortoiseSVN.
   * Extract MINGW32-ORP.zip to C:\
@@ -19,7 +19,7 @@ Optional:
 
   * Create a desktop or start menu shortcut icon for MSYS.  The shortcut should point to: C:\msys\1.0\msys.bat and if you'd like to use the official icon, browse and select: C:\msys\1.0\msys.ico
 
-= Start MSYS and SVN Checkout ORP =
+=== Start MSYS and SVN Checkout ORP ===
 
   * Test MSYS runs by either clicking on the shortcut you created above, or by running C:\msys\1.0\msys.bat from a DOS shell prompt.
 
@@ -32,7 +32,7 @@ Example command-line SVN syntax:
 svn checkout http://open-rp.googlecode.com/svn/trunk/ open-rp
 }}}
 
-= Build Open Remote Play =
+=== Build Open Remote Play ===
 
   * From the MSYS shell prompt, enter the open-rp directory and start a build.
 
@@ -41,12 +41,12 @@ $ cd open-rp
 $ make release
 }}}
 
-= Running ORP =
+=== Running ORP ===
 
   * To run ORP, open My Computer -> msys -> 1.0 -> home -> open-rp -> ORP-< version >-SVN-W32
   * Run orpui.exe
 
-= Updating =
+=== Updating ===
 
   * When new updates are available, you can SVN update the open-rp directory.
 
