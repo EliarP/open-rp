@@ -37,3 +37,7 @@ For OSX, this works similar:
   <pre> # sudo ifconfig en0 lladdr aa:bb:cc:dd:ee:ff</pre>
 
 Apparently this does work with the !AirPort interface (en1), but you have to disassociate first.  See j.altan's comment below.
+
+===How Do I Build ORP for Windows===
+
+Read the following guide: WindowsBuildGuide
