@@ -1,7 +1,7 @@
 #labels Phase-Support
 = Introduction =
 
-Welcome to the Open Remote Play Windows Build Guide.  For those who wish to build (compile) ORP from SVN, this guide is for you.  If you find any errors in this guide, please leave a comment.
+Welcome to the Open Remote Play Windows Build Guide.  For those who wish to build (compile) ORP from SVN, this guide is for you.  If you find any errors in this guide, please leave a comment, or even edit the page yourself.
 
 = Prerequisites =
 
@@ -43,7 +43,7 @@ $ make
 
 = Running ORP =
 
-  * To run ORP, open My Computer -> msys -> 1.0 -> home -> open-rp -> ORP-<version>-SVN-W32
+  * To run ORP, open My Computer -> msys -> 1.0 -> home -> open-rp -> ORP-< version >-SVN-W32
   * Run orpui.exe
 
 = Updating =
