@@ -12,7 +12,7 @@ You only need two things to start:
 
 = Installation =
 
-  * Install !TortoiseSVN.
+  * Install TortoiseSVN.
   * Extract MINGW32-ORP.zip to C:\
 
 Optional:
@@ -25,7 +25,7 @@ Optional:
 
 This should open a shell and leave you at a dollar sign prompt: $
 
-  * Now use !TortoiseSVN or whichever SVN client you have installed to download the latest ORP SVN trunk source code.  Ensure you checkout in to your MSYS home directory.  This will be: C:\msys\1.0\home\<Your Username>
+  * Now use TortoiseSVN or whichever SVN client you have installed to download the latest ORP SVN trunk source code.  Ensure you checkout in to your MSYS home directory.  This will be: C:\msys\1.0\home\<Your Username>
 
 Example command-line SVN syntax:
 {{{
