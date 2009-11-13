@@ -21,11 +21,11 @@ Optional:
 
 === Start MSYS and SVN Checkout ORP ===
 
-  * Test MSYS runs by either clicking on the shortcut you created above, or by running C:\msys\1.0\msys.bat from a DOS shell prompt.
+  * Test that MSYS runs properly by either clicking on the shortcut you created above, or by running C:\msys\1.0\msys.bat from a DOS shell prompt.
 
-This should open a shell and leave you at a dollar sign prompt: $
+This should open a shell and leave you at a dollar sign prompt: *$*
 
-  * Now use TortoiseSVN or whichever SVN client you have installed to download the latest ORP SVN trunk source code.  Ensure you checkout in to your MSYS home directory.  This will be: C:\msys\1.0\home\<Your Username>
+  * Now use TortoiseSVN or whichever SVN client you have installed to download the latest ORP SVN trunk source code.  Ensure you checkout in to your MSYS home directory.  This will be: C:\msys\1.0\home\_username_
 
 Example command-line SVN syntax:
 {{{
@@ -43,7 +43,7 @@ $ make release
 
 === Running ORP ===
 
-  * To run ORP, open My Computer -> msys -> 1.0 -> home -> open-rp -> ORP-< version >-SVN-W32
+  * To run ORP, open My Computer -> msys -> 1.0 -> home -> _username_ -> open-rp -> ORP-_version_-SVN-W32
   * Run orpui.exe
 
 === Updating ===
