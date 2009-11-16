@@ -7,7 +7,7 @@ Welcome to the Open Remote Play Windows Build Guide.  For those who wish to buil
 
 You only need two things to start:
 
-  # SVN to download and update the source code.  I use [http://tortoisesvn.tigris.org/ TortoiseSVN].  You can find a list of othere [http://subversion.tigris.org/links.html#clients here].
+  # SVN to download and update the source code.  I use [http://tortoisesvn.tigris.org/ TortoiseSVN].  You can find a list of others [http://subversion.tigris.org/links.html#clients here].
   # A complete MINGW32 + MSYS development environment which I have already done for you and can be downloaded [http://orp.ps3-hacks.com/packages/MINGW32-ORP.zip here].
 
 === Installation ===
