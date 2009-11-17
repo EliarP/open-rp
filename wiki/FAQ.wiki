@@ -38,6 +38,9 @@ For OSX, this works similar:
 
 Apparently this does work with the !AirPort interface (en1), but you have to disassociate first.  See j.altan's comment below.
 
+For Windows, apparently you can use this (thanks mechos):
+  http://www.technitium.com/tmac/index.html
+
 ===How Do I Build ORP for Windows===
 
 Read the following guide: WindowsBuildGuide
