@@ -12,4 +12,4 @@ Add your content here.  Format your content with:
   * Headings, paragraphs, and lists
   * Automatic links to other wiki pages
 
-<wiki:gadget url="http://orp.ps3-hacks.com/snapshots.xml" height="200" border="0" /> 
+<wiki:gadget url="http://orp.ps3-hacks.com/snapshots.php" height="200" border="0" /> 
