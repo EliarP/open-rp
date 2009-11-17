@@ -1,1 +1,0 @@
-<wiki:gadget url="http://orp.ps3-hacks.com/snapshots.php" height="200" border="0" /> 
