@@ -1,2 +1,12 @@
 #labels Phase-Deploy
+===Official Windows and OSX Releases===
 All official releases are available at PS3-Hacks.com: http://www.ps3-hacks.com/tag/open-remote-play/
+
+===Daily SVN Snapshots===
+Daily SVN snapshots are automatically built for Windows and OSX at 12:00 AM EST every night whenever there is a new SVN revision.  These builds are for those that wish to follow the latest SVN but are not able/not willing to build their own.  *NOTE*: These builds are not guaranteed to run properly or even run at all.
+
+===Windows===
+<wiki:gadget url="http://orp.ps3-hacks.com/snapshots/index.php?arch=0" height="200" border="0" />
+
+===OSX Intel===
+<wiki:gadget url="http://orp.ps3-hacks.com/snapshots/index.php?arch=1" height="200" border="0" />
