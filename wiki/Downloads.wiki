@@ -1,4 +1,4 @@
-#labels Phase-Deploy
+#labels Phase-Deploy,Featured
 ===Official Windows and OSX Releases===
 All official releases are available at PS3-Hacks.com: http://www.ps3-hacks.com/tag/open-remote-play/
 
