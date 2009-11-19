@@ -5,8 +5,12 @@ All official releases are available at PS3-Hacks.com: http://www.ps3-hacks.com/t
 ===Daily SVN Snapshots===
 Daily SVN snapshots are automatically built for Windows and OSX at 12:00 AM EST every night whenever there is a new SVN revision.  These builds are for those that wish to follow the latest SVN but are not able/not willing to build their own.  *NOTE*: These builds are not guaranteed to run properly or even run at all.
 
+<table border="0">
+<tr><td>
 ===Windows===
 <wiki:gadget url="http://orp.ps3-hacks.com/snapshots/index.php?arch=0" height="200" border="0" />
-
+</td><td width="100"> </td><td>
 ===OSX Intel===
 <wiki:gadget url="http://orp.ps3-hacks.com/snapshots/index.php?arch=1" height="200" border="0" />
+</td></tr>
+</table>
