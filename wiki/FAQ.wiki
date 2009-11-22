@@ -6,7 +6,8 @@
 
 ===How do I connect to my !PlayStation 3 from the Internet (work, school, cafe, etc.)?===
 
- If you are running PS3 FW 2.76 or below, see the ExternalConnection page for details.  For PS3 FW 2.80 or above, there is no solution for external connections at this time.
+ If you are running PS3 FW 2.76 or below, see the ExternalConnection page for details.  For PS3 FW 2.80 or above, you will have to properly configure a VPN.  The PS3 must see the source MAC address as if it were the registered PSP (spoofed).  Visually, this would look something like:
+[http://open-rp.googlecode.com/svn/wiki/images/orp-vpn.png]
 
 ===How do I enable and use Remote Start (turn-on the PS3 remotely)?===
 
