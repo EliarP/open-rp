@@ -8,6 +8,8 @@
 ===Connection Type===
  A profile can be one of two types; *Public* (when you connect to your PS3 from the Internet), and *Private* (for local LAN connections).  Public connections require you to enter your PSN login name (*not* your PSN ID), in to the box below.
 
+*NOTE*: Public connection types are not currently supported!  Make sure to set the connection type to *private*.
+
 ===Address / Port===
  Enter either the hostname or IP address of your PS3.  For Public connections, this would be the public IP address assigned by your ISP.  For Private connections, this would be something like: 192.168.x.x or 10.x.x.x.
 
