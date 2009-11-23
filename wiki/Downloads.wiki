@@ -8,9 +8,9 @@ SVN snapshots are automatically built for Windows and OSX whenever there are new
 <table border="0">
 <tr><td>
 ===Windows===
-<wiki:gadget url="http://orp.ps3-hacks.com/snapshots/index.php?arch=0" height="64" border="0" />
-</td><td width="100"> </td><td>
+<wiki:gadget url="http://orp.ps3-hacks.com/snapshots/index.php?arch=0" width="320" height="120" border="0" />
+</td><td width="30"> </td><td>
 ===OSX Intel===
-<wiki:gadget url="http://orp.ps3-hacks.com/snapshots/index.php?arch=1" height="64" border="0" />
+<wiki:gadget url="http://orp.ps3-hacks.com/snapshots/index.php?arch=1" width="320" height="120" border="0" />
 </td></tr>
 </table>
