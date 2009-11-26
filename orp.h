@@ -366,7 +366,7 @@ enum orpStreamType {
 	ST_VIDEO
 };
 
-struct orpConfigStream_t {
+struct orpStreamConfig_t {
 	string name;
 	enum orpStreamType type;
 #ifdef ORP_DUMP_STREAM_HEADER
@@ -398,10 +398,6 @@ struct orpConfigAudioFeed_t {
 	SDL_mutex *lock;
 	Sint32 channels;
 	Sint32 sample_rate;
-	double audio_diff_cum;
-	double audio_diff_avg_coef;
-	double audio_diff_threshold;
-	Uint32 audio_diff_avg_count;
 	Uint32 clock_offset;
 	struct orpClock_t *clock;
 	queue<struct orpAudioFrame_t *> frame;
@@ -411,6 +407,8 @@ struct orpCodec_t {
 	string name;
 	AVCodec *codec;
 };
+
+#include "orpav.h"
 
 class OpenRemotePlay
 {
@@ -426,15 +424,21 @@ protected:
 	struct orpConfig_t config;
 	vector<struct orpCodec_t *> codec;
 	struct orpView_t view;
+	orpStreamVideo *video;
+	orpStreamAudio *audio;
+
 	string session_id;
 	char *ps3_nickname;
 	ostringstream os_caption;
 	string exec_mode;
+
 	SDL_Thread *thread_video_connection;
 	SDL_Thread *thread_video_decode;
 	SDL_Thread *thread_audio_connection;
 	SDL_Thread *thread_audio_decode;
+
 	SDL_Joystick *js;
+
 	struct orpClock_t clock;
 #ifdef ORP_CLOCK_DEBUG
 	SDL_TimerID timer;

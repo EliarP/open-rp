@@ -277,7 +277,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 {
 	Uint8 *data = (Uint8 *)ptr;
 	Uint32 len = (Uint32)(size * nmemb);
-	struct orpConfigStream_t *_config = (struct orpConfigStream_t *)stream;
+	struct orpStreamConfig_t *_config = (struct orpStreamConfig_t *)stream;
 	struct orpStreamData_t *streamData = _config->stream;
 #ifdef ORP_DUMP_STREAM_RAW
 	fwrite(data, 1, len, _config->h_raw);
@@ -680,10 +680,10 @@ static Sint32 orpThreadVideoDecode(void *config)
 			orpMasterClockUpdate(_config->clock);
 			SDL_LockMutex(_config->clock->lock);
 #ifdef ORP_SYNC_TO_MASTER
-#warning "Video sync to master clock"
+//#warning "Video sync to master clock"
 			Sint32 delta = (Sint32)(_config->clock->video - _config->clock->master);
 #else
-#warning "Video sync to audio clock"
+//#warning "Video sync to audio clock"
 			Sint32 delta = (Sint32)(_config->clock->video - _config->clock->audio);
 #endif
 			Uint32 decode = _config->clock->decode = SDL_GetTicks() - ticks;
@@ -717,7 +717,7 @@ static Sint32 orpThreadVideoDecode(void *config)
 
 static Sint32 orpThreadVideoConnection(void *config)
 {
-	struct orpConfigStream_t *_config = (struct orpConfigStream_t *)config;
+	struct orpStreamConfig_t *_config = (struct orpStreamConfig_t *)config;
 
 	CURL *curl = curl_easy_init();
 
@@ -802,10 +802,7 @@ static void orpAudioFeed(void *config, Uint8 *stream, int len)
 	struct orpConfigAudioFeed_t *_config =
 		(struct orpConfigAudioFeed_t *)config;
 
-	struct orpAudioFrame_t *frame;
-
-orpAudioFeed_GetFrame:
-	frame = NULL;
+	struct orpAudioFrame_t *frame = NULL;
 
 	SDL_LockMutex(_config->lock);
 	if (_config->frame.size()) {
@@ -826,20 +823,7 @@ orpAudioFeed_GetFrame:
 			_config->clock->master = 0;
 		}
 		_config->clock->audio = frame->clock - _config->clock_offset;
-		double clock_diff = (double)_config->clock->master - (double)_config->clock->audio;
 		SDL_UnlockMutex(_config->clock->lock);
-#if 0
-		if (clock_diff > ORP_AUDIO_NOSYNC) {
-			SDL_LockMutex(_config->lock);
-			if (_config->frame.size()) {
-				delete [] frame->data;
-				delete frame;
-				SDL_UnlockMutex(_config->lock);
-				goto orpAudioFeed_GetFrame;
-			}
-			SDL_UnlockMutex(_config->lock);
-		}
-#endif
 	}
 
 	memcpy(stream, frame->data, len);
@@ -907,23 +891,20 @@ static Sint32 orpThreadAudioDecode(void *config)
 	struct orpConfigAudioFeed_t feed;
 	feed.channels = _config->channels;
 	feed.sample_rate = _config->sample_rate;
-	feed.audio_diff_avg_coef = exp(log(0.01 / ORP_AUDIO_DIFFAVGNB));
-	feed.audio_diff_avg_count = 0;
-	feed.audio_diff_threshold = 2.0 * ORP_AUDIO_BUF_LEN / _config->sample_rate;
 	feed.clock_offset = 0;
 	feed.clock = _config->clock;
 	feed.lock = SDL_CreateMutex();
 
-	SDL_AudioSpec audioSpec, requestedSpec;
-	requestedSpec.freq = _config->sample_rate;
-	requestedSpec.format = AUDIO_S16SYS;
-	requestedSpec.channels = _config->channels;
-	requestedSpec.silence = 0;
-	requestedSpec.samples = ORP_AUDIO_BUF_LEN;
-	requestedSpec.callback = orpAudioFeed;
-	requestedSpec.userdata = (void *)&feed;
+	SDL_AudioSpec spec, spec_req;
+	spec_req.freq = _config->sample_rate;
+	spec_req.format = AUDIO_S16SYS;
+	spec_req.channels = _config->channels;
+	spec_req.silence = 0;
+	spec_req.samples = ORP_AUDIO_BUF_LEN;
+	spec_req.callback = orpAudioFeed;
+	spec_req.userdata = (void *)&feed;
 
-	if(SDL_OpenAudio(&requestedSpec, &audioSpec) == -1) {
+	if(SDL_OpenAudio(&spec_req, &spec) == -1) {
 		orpPrintf("SDL_OpenAudio: %s\n", SDL_GetError());
 		return -1;
 	}
@@ -982,6 +963,7 @@ static Sint32 orpThreadAudioDecode(void *config)
 				_config->codec, _config->channels,
 				_config->sample_rate, _config->bit_rate))) return -1;
 			decode_errors = 0;
+			orpPrintf("%s: reset.\n", _config->codec->name);
 		} else decode_errors++;
 
 		delete [] packet->pkt.data;
@@ -992,7 +974,8 @@ static Sint32 orpThreadAudioDecode(void *config)
 	SDL_CloseAudio();
 	SDL_DestroyMutex(feed.lock);
 	SDL_LockMutex(orpAVMutex);
-	if (_config->codec->id == CODEC_ID_ATRAC3) av_free(context->extradata);
+	if (_config->codec->id == CODEC_ID_ATRAC3)
+		av_free(context->extradata);
 	avcodec_close(context);
 	SDL_UnlockMutex(orpAVMutex);
 	return 0;
@@ -1006,16 +989,16 @@ static Sint32 orpPlaySound(Uint8 *data, Uint32 len)
 	feed.clock = NULL;
 	feed.lock = SDL_CreateMutex();
 
-	SDL_AudioSpec audioSpec, requestedSpec;
-	requestedSpec.freq = sample_rate;
-	requestedSpec.format = AUDIO_S16SYS;
-	requestedSpec.channels = channels;
-	requestedSpec.silence = 0;
-	requestedSpec.samples = ORP_AUDIO_BUF_LEN;
-	requestedSpec.callback = orpAudioFeed;
-	requestedSpec.userdata = (void *)&feed;
+	SDL_AudioSpec spec, spec_req;
+	spec_req.freq = sample_rate;
+	spec_req.format = AUDIO_S16SYS;
+	spec_req.channels = channels;
+	spec_req.silence = 0;
+	spec_req.samples = ORP_AUDIO_BUF_LEN;
+	spec_req.callback = orpAudioFeed;
+	spec_req.userdata = (void *)&feed;
 
-	if(SDL_OpenAudio(&requestedSpec, &audioSpec) == -1) {
+	if(SDL_OpenAudio(&spec_req, &spec) == -1) {
 		orpPrintf("SDL_OpenAudio: %s\n", SDL_GetError());
 		SDL_DestroyMutex(feed.lock);
 		return -1;
@@ -1056,7 +1039,7 @@ static Sint32 orpPlaySound(Uint8 *data, Uint32 len)
 
 static Sint32 orpThreadAudioConnection(void *config)
 {
-	struct orpConfigStream_t *_config = (struct orpConfigStream_t *)config;
+	struct orpStreamConfig_t *_config = (struct orpStreamConfig_t *)config;
 
 	CURL *curl = curl_easy_init();
 
@@ -1135,6 +1118,21 @@ static Sint32 orpThreadAudioConnection(void *config)
 
 	return 0;
 }
+
+orpStreamBase::orpStreamBase(orpStreamType type, struct orpCodec_t *codec)
+	: type(type), codec(codec) { }
+
+orpStreamBase::~orpStreamBase() { }
+
+orpStreamAudio::orpStreamAudio(struct orpCodec_t *codec)
+	: orpStreamBase(ST_AUDIO, codec) { }
+
+orpStreamAudio::~orpStreamAudio() { }
+
+orpStreamVideo::orpStreamVideo(struct orpCodec_t *codec)
+	: orpStreamBase(ST_VIDEO, codec) { }
+
+orpStreamVideo::~orpStreamVideo() { }
 
 OpenRemotePlay::OpenRemotePlay(struct orpConfig_t *config)
 	: terminate(false), ps3_nickname(NULL), js(NULL),
@@ -2844,7 +2842,7 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	timer = SDL_AddTimer(1000, orpClockTimer, (void *)&clock);
 #endif
 
-	struct orpConfigStream_t *videoConfig = new struct orpConfigStream_t;
+	struct orpStreamConfig_t *videoConfig = new struct orpStreamConfig_t;
 	os.str("");
 	os << "http://";
 	os << config.ps3_addr << ":" << config.ps3_port;
@@ -2881,7 +2879,7 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	videoConfig->stream->lock = SDL_CreateMutex();
 	videoConfig->stream->cond = SDL_CreateCond();
 
-	struct orpConfigStream_t *audioConfig = new struct orpConfigStream_t;
+	struct orpStreamConfig_t *audioConfig = new struct orpStreamConfig_t;
 	os.str("");
 	os << "http://";
 	os << config.ps3_addr << ":" << config.ps3_port;
