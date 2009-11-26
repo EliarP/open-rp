@@ -29,7 +29,6 @@
 #include "orp.h"
 #include "base64.h"
 #include "images.h"
-#include "launch.h"
 #include "font.h"
 
 static void orpOutput(const char *format, va_list ap)
@@ -203,41 +202,6 @@ static void orpPostError(const char *text)
 	SDL_PushEvent(&event);
 }
 
-static void orpMasterClockUpdate(struct orpClock_t *clock)
-{
-	static Uint32 start = 0;
-	if (!start) start = SDL_GetTicks();
-	Uint32 ticks = SDL_GetTicks() - start;
-	SDL_LockMutex(clock->lock);
-	clock->master = (Uint32)((double)ticks * (double)ORP_CLOCKFREQ / (double)1000);
-	SDL_UnlockMutex(clock->lock);
-}
-
-#ifdef ORP_CLOCK_DEBUG
-static Uint32 orpClockTimer(Uint32 interval, void *param)
-{
-	struct orpClock_t *clock = (struct orpClock_t *)param;
-
-	SDL_LockMutex(clock->lock);
-	Uint32 decode = clock->decode;
-	Uint32 aq = clock->audio_queue;
-	Uint32 vq = clock->video_queue;
-	double delta =
-		((double)clock->video / (double)clock->video_freq - 
-		 (double)clock->audio / (double)clock->audio_freq) * (double)1000;
-	double a = (double)clock->audio / (double)clock->audio_freq;
-	double v = (double)clock->video / (double)clock->video_freq;
-	double m = (double)clock->master / (double)ORP_CLOCKFREQ;
-	SDL_UnlockMutex(clock->lock);
-
-	orpPrintf("a/v drift: %.04fms, fd: %ums, "
-		"m/a/v: %.04fs %.04fs %.04fs a/v queue: %u %u\n",
-		delta, decode, m, a, v, aq, vq);
-
-	return interval;
-}
-#endif
-
 static size_t orpParseResponseHeader(void *ptr, size_t size, size_t nmemb, void *stream)
 {
 	Uint8 *data = (Uint8 *)ptr;
@@ -273,18 +237,19 @@ static size_t orpParseResponseHeader(void *ptr, size_t size, size_t nmemb, void 
 	return (size_t)len;
 }
 
-static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *stream)
+static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_stream)
 {
 	Uint8 *data = (Uint8 *)ptr;
 	Uint32 len = (Uint32)(size * nmemb);
-	struct orpStreamConfig_t *_config = (struct orpStreamConfig_t *)stream;
-	struct orpStreamData_t *streamData = _config->stream;
+	orpStreamBase *stream = (orpStreamBase *)_stream;
+	orpStreamBuffer *sb = stream->GetBuffer();
+
 #ifdef ORP_DUMP_STREAM_RAW
 	fwrite(data, 1, len, _config->h_raw);
 #endif
 
 	// Allocate frame buffer
-	Uint8 *buffer = new Uint8[streamData->len + len];
+	Uint8 *buffer = new Uint8[sb->len + len];
 	if (!buffer) {
 		orpPostError("Memory allocation error!");
 		return 0;
@@ -292,12 +257,12 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 	Uint8 *bp = buffer;
 
 	// Prepend stored chunk if present
-	if (streamData->len) {
-		memcpy(bp, streamData->data, streamData->len);
-		memcpy(bp + streamData->len, data, len);
-		len += streamData->len;
-		delete [] streamData->data;
-		streamData->len = 0;
+	if (sb->len) {
+		memcpy(bp, sb->data, sb->len);
+		memcpy(bp + sb->len, data, len);
+		len += sb->len;
+		delete [] sb->data;
+		sb->len = 0;
 	} else memcpy(bp, data, len);
 
 	// Eat 0x0d 0x0a prefix if present
@@ -310,14 +275,14 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 
 	// Need at least 8 bytes (XXXXXX\n\r) to continue
 	if (len < 8) {
-		streamData->len = len;
-		streamData->data = new Uint8[len];
-		if (!streamData->data) {
+		sb->len = len;
+		sb->data = new Uint8[len];
+		if (!sb->data) {
 			delete [] buffer;
 			orpPostError("Memory allocation error!");
 			return 0;
 		}
-		memcpy(streamData->data, bp, len);
+		memcpy(sb->data, bp, len);
 		delete [] buffer;
 		return (size * nmemb);
 	}
@@ -350,14 +315,14 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 		bp[6] = 0x0d;
 
 		// Allocate memory to hold partial packet
-		streamData->len = len;
-		streamData->data = new Uint8[len];
-		if (!streamData->data) {
+		sb->len = len;
+		sb->data = new Uint8[len];
+		if (!sb->data) {
 			delete [] buffer;
 			orpPostError("Memory allocation error!");
 			return 0;
 		}
-		memcpy(streamData->data, bp, len);
+		memcpy(sb->data, bp, len);
 		delete [] buffer;
 
 		// Next...
@@ -370,19 +335,19 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 	// More data available than we need?
 	} else if (len > chunk_len) {
 		// Save the overflow for next call...
-		streamData->len = len - chunk_len;
-		streamData->data = new Uint8[streamData->len];
-		if (!streamData->data) {
+		sb->len = len - chunk_len;
+		sb->data = new Uint8[sb->len];
+		if (!sb->data) {
 			delete [] buffer;
 			orpPostError("Memory allocation error!");
 			return 0;
 		}
-		memcpy(streamData->data, bp + chunk_len, streamData->len);
+		memcpy(sb->data, bp + chunk_len, sb->len);
 	}
 
 	// We have a full audio/video packet (frame)
 	if (bp[0] != 0x80) {
-		orpPrintf("%s: invalid packet header\n", _config->name.c_str());
+		orpPrintf("%s: invalid packet header\n", stream->GetCodecName());
 		delete [] buffer;
 		orpPostError("Invalid packet header!");
 		return 0;
@@ -390,7 +355,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 
 	// Asked to restore audio/video stream?
 	if (bp[1] == 0xfd) {
-		orpPrintf("%s: restore (reset)\n", _config->name.c_str());
+		orpPrintf("%s: restore (reset)\n", stream->GetCodecName());
 		orpPostEvent(EVENT_RESTORE);
 		delete [] buffer;
 		return (size * nmemb);
@@ -398,7 +363,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 
 	// Audio/video magic of 0x8081 seems to mean PS3 shutdown
 	if (bp[1] == 0x81) {
-		orpPrintf("%s: system power-off\n", _config->name.c_str());
+		orpPrintf("%s: system power-off\n", stream->GetCodecName());
 		delete [] buffer;
 		orpPostEvent(EVENT_SHUTDOWN);
 		return (size * nmemb);
@@ -411,7 +376,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 	// Audio or video header?
 	if (bp[1] != 0x80 && bp[1] != 0xff && bp[1] != 0xfb && bp[1] != 0xfc &&
 		bp[1] != 0xfe) {
-		orpPrintf("%s: invalid magic: 0x%02x%02x\n", _config->name.c_str(),
+		orpPrintf("%s: invalid magic: 0x%02x%02x\n", stream->GetCodecName(),
 			bp[0], bp[1]);
 		delete [] buffer;
 		// Discard...
@@ -439,7 +404,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 //			fclose(fh);
 //		}
 		orpPrintf("%s: packet length mis-match: %u, expected: %u\n",
-			_config->name.c_str(), packet->pkt.size,
+			stream->GetCodecName(), packet->pkt.size,
 			SDL_Swap16(packet->header.len));
 
 		// TODO: For now we just accept the header length over the
@@ -465,18 +430,19 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 	memcpy(packet->pkt.data, bp, packet->pkt.size);
 	delete [] buffer;
 
+	struct orpKey_t *key = stream->GetKeys();
+
 	// Decrypt h2.64 video key-frames
 	if ((packet->header.magic[1] == 0xff || packet->header.magic[1] == 0xfe)
 		&& packet->header.unk6 == 0x0401) {
-		memcpy(_config->key.iv1,
-			_config->key.xor_nonce, ORP_KEY_LEN);
+		memcpy(key->iv1, key->xor_nonce, ORP_KEY_LEN);
 		AES_cbc_encrypt(packet->pkt.data, packet->pkt.data,
 			packet->pkt.size - (packet->pkt.size % ORP_KEY_LEN),
-			&_config->aes_key, _config->key.iv1, AES_DECRYPT);
+			stream->GetDecryptKey(), key->iv1, AES_DECRYPT);
 
 		if (packet->pkt.data[0] != 0x00) {
 			orpPrintf("%s: packet decryption failure: 0x%02x.\n",
-				_config->name.c_str(), packet->pkt.data[0]);
+				stream->GetCodecName(), packet->pkt.data[0]);
 #ifdef ORP_DUMP_STREAM_DATA
 			fwrite(bp, 1, packet->pkt.size, _config->h_data);
 #endif
@@ -488,38 +454,38 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *str
 	}
 	// Decrypt AAC audio
 	else if (packet->header.magic[1] == 0x80 && packet->header.unk8) {
-		memcpy(_config->key.iv1,
-			_config->key.xor_nonce, ORP_KEY_LEN);
+		memcpy(key->iv1, key->xor_nonce, ORP_KEY_LEN);
 		AES_cbc_encrypt(packet->pkt.data, packet->pkt.data,
 			packet->pkt.size - (packet->pkt.size % ORP_KEY_LEN),
-			&_config->aes_key, _config->key.iv1, AES_DECRYPT);
+			stream->GetDecryptKey(), key->iv1, AES_DECRYPT);
 	}
 	// Decrypt MPEG4 video key-frames
 	else if (packet->header.magic[1] == 0xfb && (
 		packet->header.unk6 == 0x0001 || packet->header.unk6 == 0x0401)) {
-		memcpy(_config->key.iv1,
-			_config->key.xor_nonce, ORP_KEY_LEN);
+		memcpy(key->iv1, key->xor_nonce, ORP_KEY_LEN);
 		AES_cbc_encrypt(packet->pkt.data, packet->pkt.data,
 			packet->pkt.size - (packet->pkt.size % ORP_KEY_LEN),
-			&_config->aes_key, _config->key.iv1, AES_DECRYPT);
+			stream->GetDecryptKey(), key->iv1, AES_DECRYPT);
 	}
 	// Decrypt ATRAC3 audio
 	else if (packet->header.magic[1] == 0xfc && packet->header.unk8) {
-		memcpy(_config->key.iv1,
-			_config->key.xor_nonce, ORP_KEY_LEN);
+		memcpy(key->iv1,
+			key->xor_nonce, ORP_KEY_LEN);
 		AES_cbc_encrypt(packet->pkt.data, packet->pkt.data,
 			packet->pkt.size - (packet->pkt.size % ORP_KEY_LEN),
-			&_config->aes_key, _config->key.iv1, AES_DECRYPT);
+			stream->GetDecryptKey(), key->iv1, AES_DECRYPT);
 	}
 #ifdef ORP_DUMP_STREAM_DATA
 	fwrite(packet->pkt.data, 1, packet->pkt.size, _config->h_data);
 #endif
 
 	// Push stream packet
-	SDL_LockMutex(streamData->lock);
-	streamData->pkt.push(packet);
-	SDL_CondSignal(streamData->cond);
-	SDL_UnlockMutex(streamData->lock);
+#if 0
+	SDL_LockMutex(sb->lock);
+	sb->pkt.push(packet);
+	SDL_CondSignal(sb->cond);
+	SDL_UnlockMutex(sb->lock);
+#endif
 
 	return (size * nmemb);
 }
@@ -534,8 +500,9 @@ static bool orpDecodeKey(Uint8 *dst, const string &src)
 	return true;
 }
 
-static SDL_mutex *orpAVMutex = NULL;
+static SDL_mutex *orpGlobalMutex = NULL;
 
+#if 0
 static Sint32 orpThreadVideoDecode(void *config)
 {
 	struct orpThreadVideoDecode_t *_config =
@@ -544,13 +511,13 @@ static Sint32 orpThreadVideoDecode(void *config)
 
 //	Uint32 fps = (Uint32)(1000 / 30);
 
-	SDL_LockMutex(orpAVMutex);
+	SDL_LockMutex(orpGlobalMutex);
 	AVCodecContext *context = avcodec_alloc_context();
 	if (avcodec_open(context, _config->codec) < 0) {
-		SDL_UnlockMutex(orpAVMutex);
+		SDL_UnlockMutex(orpGlobalMutex);
 		return -1;
 	}
-	SDL_UnlockMutex(orpAVMutex);
+	SDL_UnlockMutex(orpGlobalMutex);
 
 	AVFrame *frame;
 	frame = avcodec_alloc_frame();
@@ -677,27 +644,12 @@ static Sint32 orpThreadVideoDecode(void *config)
 			SDL_DisplayYUVOverlay(_config->view->overlay, &rect);
 			SDL_UnlockMutex(_config->view->lock);
 
-			orpMasterClockUpdate(_config->clock);
 			SDL_LockMutex(_config->clock->lock);
-#ifdef ORP_SYNC_TO_MASTER
-//#warning "Video sync to master clock"
-			Sint32 delta = (Sint32)(_config->clock->video - _config->clock->master);
-#else
-//#warning "Video sync to audio clock"
-			Sint32 delta = (Sint32)(_config->clock->video - _config->clock->audio);
-#endif
 			Uint32 decode = _config->clock->decode = SDL_GetTicks() - ticks;
 			SDL_UnlockMutex(_config->clock->lock);
 
-			Sint32 drift = 0;
-			if (delta > 0)
-				drift = (Sint32)((double)delta / (double)ORP_CLOCKFREQ * (double)1000);
-			if (drift > 0) {
-				Uint32 delay = decode < drift ? drift - decode : drift;
-				if (delay > 1000) {
-					//orpPrintf("Delay too large: %u\n", delay);
-				} else SDL_Delay(delay);
-			}
+			Uint32 delay = (1000 / _config->frame_rate) - decode;
+			if (delay > 0) SDL_Delay(delay);
 		}
 
 		delete [] packet->pkt.data;
@@ -705,23 +657,24 @@ static Sint32 orpThreadVideoDecode(void *config)
 	}
 
 	av_free(frame);
-	SDL_LockMutex(orpAVMutex);
+	SDL_LockMutex(orpGlobalMutex);
 	avcodec_close(context);
-	SDL_UnlockMutex(orpAVMutex);
+	SDL_UnlockMutex(orpGlobalMutex);
 	sws_freeContext(sws_normal);
 	sws_freeContext(sws_medium);
 	sws_freeContext(sws_large);
 	sws_freeContext(sws_fullscreen);
 	return 0;
 }
+#endif 
 
-static Sint32 orpThreadVideoConnection(void *config)
+static Sint32 orpThreadVideoConnection(void *_stream)
 {
-	struct orpStreamConfig_t *_config = (struct orpStreamConfig_t *)config;
+	orpStreamVideo *stream = (orpStreamVideo *)_stream;
 
 	CURL *curl = curl_easy_init();
 
-	curl_easy_setopt(curl, CURLOPT_URL, _config->url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, stream->GetUrl());
 	curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
 	curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, orpCurlDebug);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, ORP_USER_AGENT);
@@ -730,7 +683,7 @@ static Sint32 orpThreadVideoConnection(void *config)
 	curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&headerList);
 	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, orpParseResponseHeader);
 
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)_config);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, _stream);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, orpParseStreamData);
 
 	curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
@@ -756,12 +709,12 @@ static Sint32 orpThreadVideoConnection(void *config)
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
-	os << "Host: " << _config->host << ":" << _config->port;
+	os << "Host: " << stream->GetHost() << ":" << stream->GetPort();
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
 	os << orpGetHeader(HEADER_VIDEO_CODEC);
-	os << ": " << _config->codec;
+	os << ": " << stream->GetCodecName();
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
@@ -771,12 +724,12 @@ static Sint32 orpThreadVideoConnection(void *config)
 
 	os.str("");
 	os << orpGetHeader(HEADER_AUTH);
-	os << ": " << (const char *)_config->key.auth_normal;
+	os << ": " << stream->GetAuthKey();
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
 	os << orpGetHeader(HEADER_SESSIONID);
-	os << ": " << _config->session_id;
+	os << ": " << stream->GetSessionId();
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
@@ -791,12 +744,13 @@ static Sint32 orpThreadVideoConnection(void *config)
 	curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
 
-	orpPrintf("%s: stream exit: %d\n", _config->name.c_str(), cc);
+	orpPrintf("%s: stream exit: %d\n", stream->GetCodecName(), cc);
 	orpPostEvent(EVENT_STREAM_EXIT);
 
 	return 0;
 }
 
+#if 0
 static void orpAudioFeed(void *config, Uint8 *stream, int len)
 {
 	struct orpConfigAudioFeed_t *_config =
@@ -833,7 +787,7 @@ static void orpAudioFeed(void *config, Uint8 *stream, int len)
 
 static AVCodecContext *orpInitAudioCodec(AVCodec *codec, Sint32 channels, Sint32 sample_rate, Sint32 bit_rate)
 {
-	SDL_LockMutex(orpAVMutex);
+	SDL_LockMutex(orpGlobalMutex);
 	AVCodecContext *context = avcodec_alloc_context();
 	context->channels = channels;
 	context->sample_rate = sample_rate;
@@ -864,11 +818,11 @@ static AVCodecContext *orpInitAudioCodec(AVCodec *codec, Sint32 channels, Sint32
 	if (avcodec_open(context, codec) < 0) {
 		if (codec->id == CODEC_ID_ATRAC3) av_free(context->extradata);
 		av_free(context);
-		SDL_UnlockMutex(orpAVMutex);
+		SDL_UnlockMutex(orpGlobalMutex);
 		orpPrintf("codec context initialization failed.\n");
 		return NULL;
 	}
-	SDL_UnlockMutex(orpAVMutex);
+	SDL_UnlockMutex(orpGlobalMutex);
 
 	return context;
 }
@@ -946,19 +900,17 @@ static Sint32 orpThreadAudioDecode(void *config)
 			audioFrame->clock = SDL_Swap32(packet->header.clock);
 			memcpy(audioFrame->data, buffer, audioFrame->len);
 
-			orpMasterClockUpdate(_config->clock);
-
 			SDL_LockMutex(feed.lock);
 			feed.frame.push(audioFrame);
 			SDL_UnlockMutex(feed.lock);
 
 			decode_errors = 0;
 		} else if (decode_errors > 5) {
-			SDL_LockMutex(orpAVMutex);
+			SDL_LockMutex(orpGlobalMutex);
 			if (_config->codec->id == CODEC_ID_ATRAC3)
 				av_free(context->extradata);
 			avcodec_close(context);
-			SDL_UnlockMutex(orpAVMutex);
+			SDL_UnlockMutex(orpGlobalMutex);
 			if (!(context = orpInitAudioCodec(
 				_config->codec, _config->channels,
 				_config->sample_rate, _config->bit_rate))) return -1;
@@ -973,77 +925,22 @@ static Sint32 orpThreadAudioDecode(void *config)
 	SDL_PauseAudio(1);
 	SDL_CloseAudio();
 	SDL_DestroyMutex(feed.lock);
-	SDL_LockMutex(orpAVMutex);
+	SDL_LockMutex(orpGlobalMutex);
 	if (_config->codec->id == CODEC_ID_ATRAC3)
 		av_free(context->extradata);
 	avcodec_close(context);
-	SDL_UnlockMutex(orpAVMutex);
+	SDL_UnlockMutex(orpGlobalMutex);
 	return 0;
 }
+#endif 
 
-static Sint32 orpPlaySound(Uint8 *data, Uint32 len)
+static Sint32 orpThreadAudioConnection(void *_stream)
 {
-	Sint32 channels = 2, sample_rate = 48000;
-
-	struct orpConfigAudioFeed_t feed;
-	feed.clock = NULL;
-	feed.lock = SDL_CreateMutex();
-
-	SDL_AudioSpec spec, spec_req;
-	spec_req.freq = sample_rate;
-	spec_req.format = AUDIO_S16SYS;
-	spec_req.channels = channels;
-	spec_req.silence = 0;
-	spec_req.samples = ORP_AUDIO_BUF_LEN;
-	spec_req.callback = orpAudioFeed;
-	spec_req.userdata = (void *)&feed;
-
-	if(SDL_OpenAudio(&spec_req, &spec) == -1) {
-		orpPrintf("SDL_OpenAudio: %s\n", SDL_GetError());
-		SDL_DestroyMutex(feed.lock);
-		return -1;
-	}
-
-	SDL_PauseAudio(0);
-
-	Uint32 i, frame_size = 4096;
-	for (i = 0; len != 0; i += frame_size) {
-		struct orpAudioFrame_t *audioFrame =
-			new struct orpAudioFrame_t;
-
-		audioFrame->len = frame_size;
-		audioFrame->data = new Uint8[frame_size];
-		memset(audioFrame->data, 0, frame_size);
-		memcpy(audioFrame->data, data + i,
-			(len > frame_size) ? frame_size : len);
-		len -= (len > frame_size ? frame_size : len);
-
-		SDL_LockMutex(feed.lock);
-		feed.frame.push(audioFrame);
-		SDL_UnlockMutex(feed.lock);
-	}
-
-	for ( ;; ) {
-		SDL_LockMutex(feed.lock);
-		if (feed.frame.size() == 0) break;
-		SDL_UnlockMutex(feed.lock);
-		SDL_Delay(100);
-	}
-
-	SDL_PauseAudio(1);
-	SDL_CloseAudio();
-	SDL_DestroyMutex(feed.lock);
-
-	return 0;
-}
-
-static Sint32 orpThreadAudioConnection(void *config)
-{
-	struct orpStreamConfig_t *_config = (struct orpStreamConfig_t *)config;
+	orpStreamAudio *stream = (orpStreamAudio *)_stream;
 
 	CURL *curl = curl_easy_init();
 
-	curl_easy_setopt(curl, CURLOPT_URL, _config->url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, stream->GetUrl());
 	curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
 	curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, orpCurlDebug);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, ORP_USER_AGENT);
@@ -1052,7 +949,7 @@ static Sint32 orpThreadAudioConnection(void *config)
 	curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&headerList);
 	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, orpParseResponseHeader);
 
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)_config);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, _stream);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, orpParseStreamData);
 
 	curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
@@ -1078,12 +975,12 @@ static Sint32 orpThreadAudioConnection(void *config)
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
-	os << "Host: " << _config->host << ":" << _config->port;
+	os << "Host: " << stream->GetHost() << ":" << stream->GetPort();
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
 	os << orpGetHeader(HEADER_AUDIO_CODEC);
-	os << ": " << _config->codec;
+	os << ": " << stream->GetCodecName();
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
@@ -1093,12 +990,12 @@ static Sint32 orpThreadAudioConnection(void *config)
 
 	os.str("");
 	os << orpGetHeader(HEADER_AUTH);
-	os << ": " << (const char *)_config->key.auth_normal;
+	os << ": " << stream->GetAuthKey();
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
 	os << orpGetHeader(HEADER_SESSIONID);
-	os << ": " << _config->session_id;
+	os << ": " << stream->GetSessionId();
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
@@ -1113,35 +1010,125 @@ static Sint32 orpThreadAudioConnection(void *config)
 	curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
 
-	orpPrintf("%s: stream exit: %d\n", _config->name.c_str(), cc);
+	orpPrintf("%s: stream exit: %d\n", stream->GetCodecName(), cc);
 	orpPostEvent(EVENT_STREAM_EXIT);
 
 	return 0;
 }
 
-orpStreamBase::orpStreamBase(orpStreamType type, struct orpCodec_t *codec)
-	: type(type), codec(codec) { }
+orpStreamBuffer::orpStreamBuffer()
+	: clock(0), lock(NULL), period(0), len(0), pos(0), data(NULL),
+	sibling(NULL)
+{
+	lock = SDL_CreateMutex();
+}
 
-orpStreamBase::~orpStreamBase() { }
+orpStreamBuffer::~orpStreamBuffer()
+{
+	if (lock) SDL_DestroyMutex(lock);
+}
+
+void orpStreamBuffer::Push(struct orpStreamPacket_t *pkt)
+{
+}
+
+struct orpStreamPacket_t *orpStreamBuffer::Pop(void)
+{
+	return NULL;
+}
+
+void orpStreamBuffer::Lock(void)
+{
+}
+
+void orpStreamBuffer::Unlock(void)
+{
+}
+
+orpStreamBase::orpStreamBase(orpStreamType type, struct orpCodec_t *codec)
+	: type(type), codec(codec), clock_freq(0),
+	thread_connection(NULL)
+{
+	memset(&key, 0, sizeof(struct orpKey_t));
+	buffer = new orpStreamBuffer();
+}
+
+orpStreamBase::~orpStreamBase()
+{
+	delete buffer;
+	Sint32 thread_result;
+	if (thread_connection)
+		SDL_WaitThread(thread_connection, &thread_result);
+}
+
+void orpStreamBase::SetKeys(const struct orpKey_t *key)
+{
+	memcpy(&this->key, key, sizeof(struct orpKey_t));
+	AES_set_decrypt_key(this->key.xor_pkey, ORP_KEY_LEN * 8,
+		&aes_key);
+}
+
+const char *orpStreamBase::GetAuthKey(enum orpAuthType type)
+{
+	switch (type) {
+	case orpAUTH_CHANGE_BITRATE:
+		return (const char *)key.auth_change_bitrate;
+	case orpAUTH_SESSION_TERM:
+		return (const char *)key.auth_session_term;
+	}
+	return (const char *)key.auth_normal;
+}
 
 orpStreamAudio::orpStreamAudio(struct orpCodec_t *codec)
-	: orpStreamBase(ST_AUDIO, codec) { }
+	: orpStreamBase(ST_AUDIO, codec),
+	channels(0), sample_rate(0), bit_rate(0)
+{
+}
 
-orpStreamAudio::~orpStreamAudio() { }
+orpStreamAudio::~orpStreamAudio()
+{
+}
+
+int orpStreamAudio::Connect(string host, Uint16 port, string url, string session_id)
+{
+	thread_connection = SDL_CreateThread(orpThreadAudioConnection,
+		(void *)this);
+	if (!thread_connection) return -1;
+	return 0;
+}
 
 orpStreamVideo::orpStreamVideo(struct orpCodec_t *codec)
-	: orpStreamBase(ST_VIDEO, codec) { }
+	: orpStreamBase(ST_VIDEO, codec), terminate(false),
+	frame_delay(0), thread_decode(NULL)
+{
+	cond_decode = SDL_CreateCond();
+}
 
-orpStreamVideo::~orpStreamVideo() { }
+orpStreamVideo::~orpStreamVideo()
+{
+	terminate = true;
+	SDL_CondBroadcast(cond_decode);
+
+	Sint32 thread_result;
+	if (thread_decode) SDL_WaitThread(thread_decode, &thread_result);
+
+	SDL_DestroyCond(cond_decode);
+}
+
+int orpStreamVideo::Connect(string host, Uint16 port, string url, string session_id)
+{
+	thread_connection = SDL_CreateThread(orpThreadVideoConnection,
+		(void *)this);
+	if (!thread_connection) return -1;
+	return 0;
+}
 
 OpenRemotePlay::OpenRemotePlay(struct orpConfig_t *config)
 	: terminate(false), ps3_nickname(NULL), js(NULL),
 	splash(NULL), font_normal(NULL), font_small(NULL),
-#ifdef ORP_CLOCK_DEBUG
-	timer(0),
-#endif
 	thread_video_connection(NULL), thread_video_decode(NULL),
-	thread_audio_connection(NULL), thread_audio_decode(NULL)
+	thread_audio_connection(NULL), thread_audio_decode(NULL),
+	stream_audio(NULL), stream_video(NULL)
 {
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
 	rmask = 0xff000000;
@@ -1159,7 +1146,7 @@ OpenRemotePlay::OpenRemotePlay(struct orpConfig_t *config)
 	view.scale.h = ORP_FRAME_HEIGHT;
 	view.lock = SDL_CreateMutex();
 
-	orpAVMutex = SDL_CreateMutex();
+	orpGlobalMutex = SDL_CreateMutex();
 
 	// Copy config
 	memcpy(&this->config, config, sizeof(struct orpConfig_t));
@@ -1225,7 +1212,7 @@ OpenRemotePlay::~OpenRemotePlay()
 	SessionDestroy();
 	Sint32 i;
 	for (i = 0; i < codec.size(); i++) delete codec[i];
-	if (orpAVMutex) SDL_DestroyMutex(orpAVMutex);
+	if (orpGlobalMutex) SDL_DestroyMutex(orpGlobalMutex);
 	if (view.lock) SDL_DestroyMutex(view.lock);
 	if (TTF_WasInit()) TTF_Quit();
 	if (splash) SDL_FreeSurface(splash);
@@ -1462,9 +1449,6 @@ bool OpenRemotePlay::SessionCreate(void)
 
 		// Fire it up!
 		result = SessionPerform();
-#ifdef ORP_CLOCK_DEBUG
-		SDL_RemoveTimer(timer);
-#endif
 		if (result != EVENT_RESTORE) {
 			if (!terminate) DisplayError("Connection terminated!");
 			break;
@@ -1663,12 +1647,12 @@ bool OpenRemotePlay::SetCaption(const char *caption)
 	return quit;
 }
 
-AVCodec *OpenRemotePlay::GetCodec(const string &name)
+struct orpCodec_t *OpenRemotePlay::GetCodec(const string &name)
 {
 	Uint32 i;
 	for (i = 0; i < codec.size(); i++) {
 		if (strcasecmp(name.c_str(), codec[i]->name.c_str())) continue;
-		return codec[i]->codec;
+		return codec[i];
 	}
 	return NULL;
 }
@@ -1753,6 +1737,7 @@ Sint32 OpenRemotePlay::ControlPerform(CURL *curl, struct orpCtrlMode_t *mode)
 	return (Sint32)code;
 }
 
+#if 0
 static void orpDumpPadState(Uint8 *state)
 {
 	bool toggle = false;
@@ -1769,6 +1754,7 @@ static void orpDumpPadState(Uint8 *state)
 		orpPrintf("\n");
 	}
 }
+#endif
 
 Sint32 OpenRemotePlay::SendPadState(Uint8 *pad, Uint32 id, Uint32 &count, Uint32 timestamp, vector<string> &headers)
 {
@@ -1999,8 +1985,8 @@ Sint32 OpenRemotePlay::SessionControl(CURL *curl)
 	vector<Uint32> kbmap_queue;
 
 	Uint32 count = 0;
-	Uint32 id = 0, be_id;
-	Uint32 timestamp, be_timestamp;
+	Uint32 id = 0;
+	Uint32 timestamp;
 	Uint32 ticks = SDL_GetTicks();
 	Sint16 jsr_xaxis = 0x80, jsr_yaxis = 0x80;
 	Sint16 jsl_xaxis = 0x80, jsl_yaxis = 0x80;
@@ -2810,17 +2796,17 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	mode.param2 = "1024000";
 	if (ControlPerform(curl, &mode) != 200) return -1;
 
-	AVCodec *videoCodec = GetCodec(
+	struct orpCodec_t *codec_video = GetCodec(
 		orpGetHeaderValue(HEADER_VIDEO_CODEC, headerList));
-	if (!videoCodec) {
+	if (!codec_video) {
 		orpPrintf("Required video codec not found: %s\n",
 			orpGetHeaderValue(HEADER_VIDEO_CODEC, headerList));
 		DisplayError("Video codec not found!");
 		return -1;
 	}
-	AVCodec *audioCodec = GetCodec(
+	struct orpCodec_t *codec_audio = GetCodec(
 		orpGetHeaderValue(HEADER_AUDIO_CODEC, headerList));
-	if (!audioCodec) {
+	if (!codec_audio) {
 		orpPrintf("Required audio codec not found: %s\n",
 			orpGetHeaderValue(HEADER_AUDIO_CODEC, headerList));
 		DisplayError("Audio codec not found!");
@@ -2835,101 +2821,51 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	if (!ps3_nickname) ps3_nickname = strdup("Unknown");
 	SetCaption(NULL);
 
-	// Play sound...
-	static bool played = false;
-	if (!played) { played = true; orpPlaySound(launch_wav, launch_wav_len); }
-#ifdef ORP_CLOCK_DEBUG
-	timer = SDL_AddTimer(1000, orpClockTimer, (void *)&clock);
-#endif
+	stream_audio = new orpStreamAudio(codec_audio);
+	stream_audio->SetKeys(&config.key);
+	stream_audio->SetClockFrequency(
+		atoi(orpGetHeaderValue(HEADER_AUDIO_CLOCKFREQ, headerList)));
+	stream_audio->SetChannels(
+		atoi(orpGetHeaderValue(HEADER_AUDIO_CHANNELS, headerList)));
+	stream_audio->SetSampleRate(
+		atoi(orpGetHeaderValue(HEADER_AUDIO_SAMPLERATE, headerList)));
+	stream_audio->SetBitRate(
+		atoi(orpGetHeaderValue(HEADER_AUDIO_BITRATE, headerList)));
 
-	struct orpStreamConfig_t *videoConfig = new struct orpStreamConfig_t;
+	stream_video = new orpStreamVideo(codec_video);
+	stream_video->SetKeys(&config.key);
+	stream_video->SetClockFrequency(
+		atoi(orpGetHeaderValue(HEADER_VIDEO_CLOCKFREQ, headerList)));
+	stream_video->SetFrameDelay(
+		strtod(orpGetHeaderValue(HEADER_VIDEO_FRAMERATE, headerList),
+		(char **)NULL));
+
+	stream_audio->SetSibling(stream_video);
+	stream_video->SetSibling(stream_audio);
+
 	os.str("");
 	os << "http://";
 	os << config.ps3_addr << ":" << config.ps3_port;
 	os << ORP_GET_VIDEO;
-	videoConfig->url = os.str();
-	videoConfig->host = config.ps3_addr;
-	videoConfig->port = config.ps3_port;
+	if (stream_video->Connect(config.ps3_addr, config.ps3_port,
+		os.str(), session_id) != 0) return -1;
 
-	memcpy(&videoConfig->key, &config.key, sizeof(struct orpKey_t));
-	AES_set_decrypt_key(videoConfig->key.xor_pkey, ORP_KEY_LEN * 8,
-		&videoConfig->aes_key);
-	videoConfig->codec = orpGetHeaderValue(HEADER_VIDEO_CODEC, headerList);
-	videoConfig->session_id = session_id;
+	// SDL_Delay(250);
 
-	videoConfig->stream = new struct orpStreamData_t;
-	videoConfig->name = videoCodec->name;
-#ifdef ORP_DUMP_STREAM_HEADER
-	os.str("");
-	os << videoCodec->name << "-header.dat";
-	videoConfig->h_header = fopen(os.str().c_str(), "w+");
-#endif
-#ifdef ORP_DUMP_STREAM_DATA
-	os.str("");
-	os << videoCodec->name << "-stream.dat";
-	videoConfig->h_data = fopen(os.str().c_str(), "w+");
-#endif
-#ifdef ORP_DUMP_STREAM_RAW
-	os.str("");
-	os << videoCodec->name << "-raw.dat";
-	videoConfig->h_raw = fopen(os.str().c_str(), "w+");
-#endif
-	videoConfig->stream->data = NULL;
-	videoConfig->stream->len = videoConfig->stream->pos = 0;
-	videoConfig->stream->lock = SDL_CreateMutex();
-	videoConfig->stream->cond = SDL_CreateCond();
-
-	struct orpStreamConfig_t *audioConfig = new struct orpStreamConfig_t;
 	os.str("");
 	os << "http://";
 	os << config.ps3_addr << ":" << config.ps3_port;
 	os << ORP_GET_AUDIO;
-	audioConfig->url = os.str();
-	audioConfig->host = config.ps3_addr;
-	audioConfig->port = config.ps3_port;
+	if (stream_audio->Connect(config.ps3_addr, config.ps3_port,
+		os.str(), session_id) != 0) return -1;
 
-	memcpy(&audioConfig->key, &config.key, sizeof(struct orpKey_t));
-	AES_set_decrypt_key(audioConfig->key.xor_pkey, ORP_KEY_LEN * 8,
-		&audioConfig->aes_key);
-	audioConfig->codec = orpGetHeaderValue(HEADER_AUDIO_CODEC, headerList);
-	audioConfig->session_id = session_id;
-
-	audioConfig->stream = new struct orpStreamData_t;
-	audioConfig->name = audioCodec->name;
-#ifdef ORP_DUMP_STREAM_HEADER
-	os.str("");
-	os << audioCodec->name << "-header.dat";
-	audioConfig->h_header = fopen(os.str().c_str(), "w+");
-#endif
-#ifdef ORP_DUMP_STREAM_DATA
-	os.str("");
-	os << audioCodec->name << "-stream.dat";
-	audioConfig->h_data = fopen(os.str().c_str(), "w+");
-#endif
-#ifdef ORP_DUMP_STREAM_RAW
-	os.str("");
-	os << audioCodec->name << "-raw.dat";
-	audioConfig->h_raw = fopen(os.str().c_str(), "w+");
-#endif
-	audioConfig->stream->data = NULL;
-	audioConfig->stream->len = audioConfig->stream->pos = 0;
-	audioConfig->stream->lock = SDL_CreateMutex();
-	audioConfig->stream->cond = SDL_CreateCond();
-
-	if (!(thread_video_connection = SDL_CreateThread(orpThreadVideoConnection,
-		videoConfig))) return -1;
-
-	SDL_Delay(250);
-
-	if (!(thread_audio_connection = SDL_CreateThread(orpThreadAudioConnection,
-		audioConfig))) return -1;
-
+#if 0
 	struct orpThreadVideoDecode_t *videoDecode = new struct orpThreadVideoDecode_t;
 	memset(videoDecode, 0, sizeof(struct orpThreadVideoDecode_t));
 	videoDecode->view = &view;
 	videoDecode->frame_rate =
 		atoi(orpGetHeaderValue(HEADER_VIDEO_FRAMERATE, headerList));
-	videoDecode->codec = videoCodec;
+	videoDecode->codec = codec_video->codec;
 	videoDecode->stream = videoConfig->stream;
 	videoDecode->clock = &clock;
 
@@ -2938,7 +2874,7 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 
 	struct orpThreadAudioDecode_t *audioDecode = new struct orpThreadAudioDecode_t;
 	memset(audioDecode, 0, sizeof(struct orpThreadVideoDecode_t));
-	audioDecode->codec = audioCodec;
+	audioDecode->codec = codec_audio->codec;
 	audioDecode->channels =
 		atoi(orpGetHeaderValue(HEADER_AUDIO_CHANNELS, headerList));
 	audioDecode->sample_rate =
@@ -2950,11 +2886,13 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 
 	if (!(thread_audio_decode = SDL_CreateThread(orpThreadAudioDecode,
 		audioDecode))) return -1;
+#endif
 
 	// Hang-out here until something happens...
 	Sint32 result = SessionControl(curl);
 
 	// Shutdown...
+#if 0
 	videoDecode->terminate = audioDecode->terminate = true;
 
 	Sint32 thread_result;
@@ -2966,13 +2904,16 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 
 	SDL_WaitThread(thread_video_decode, &thread_result);
 	SDL_WaitThread(thread_audio_decode, &thread_result);
-
+#endif
 	if (result == EVENT_RESTORE)
 		orpPrintf("Session restore.\n");
 	else
 		orpPrintf("Session terminated.\n");
 
 	// TODO: Free, clean-up everything, being really lazy here...
+	if (stream_audio) delete stream_audio;
+	if (stream_video) delete stream_video;
+#if 0
 #ifdef ORP_DUMP_STREAM_HEADER
 	if (videoConfig->h_header) fclose(videoConfig->h_header);
 	if (audioConfig->h_header) fclose(audioConfig->h_header);
@@ -2987,7 +2928,7 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 #endif
 	thread_video_connection = thread_video_decode = NULL;
 	thread_audio_connection = thread_audio_decode = NULL;
-
+#endif
 	return result;
 }
 

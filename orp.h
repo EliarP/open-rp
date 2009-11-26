@@ -58,13 +58,7 @@ extern "C" {
 #define ORP_SESSION_LEN		16
 #define ORP_PADSTATE_MAX	60
 #define ORP_PADSTATE_LEN	128
-#define ORP_CLOCKFREQ		90000
-
-#define ORP_VIDEO_MAXQUEUE	2
 #define ORP_AUDIO_BUF_LEN 	1024
-#define ORP_AUDIO_DIFFAVGNB	20
-#define ORP_AUDIO_NOSYNC	100.0
-#define ORP_AUDIO_SAMPLE_CORRECTION_PERCENT_MAX 10
 
 #define ORP_USER_AGENT		"premo/1.0.0 libhttp/1.0.0"
 
@@ -424,8 +418,8 @@ protected:
 	struct orpConfig_t config;
 	vector<struct orpCodec_t *> codec;
 	struct orpView_t view;
-	orpStreamVideo *video;
-	orpStreamAudio *audio;
+	orpStreamVideo *stream_video;
+	orpStreamAudio *stream_audio;
 
 	string session_id;
 	char *ps3_nickname;
@@ -440,9 +434,6 @@ protected:
 	SDL_Joystick *js;
 
 	struct orpClock_t clock;
-#ifdef ORP_CLOCK_DEBUG
-	SDL_TimerID timer;
-#endif
 	TCPsocket skt_pad;
 	TTF_Font *font_small;
 	TTF_Font *font_normal;
@@ -456,7 +447,7 @@ protected:
 	bool CreateKeys(const string &nonce,	
 		enum orpAuthType type = orpAUTH_NORMAL);
 	bool SetCaption(const char *caption);
-	AVCodec *GetCodec(const string &name);
+	struct orpCodec_t *GetCodec(const string &name);
 	Sint32 ControlPerform(CURL *curl, struct orpCtrlMode_t *mode);
 	Sint32 SendPadState(Uint8 *pad, Uint32 id,
 		Uint32 &count, Uint32 timestamp, vector<string> &headers);
