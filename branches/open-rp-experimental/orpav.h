@@ -36,18 +36,20 @@ public:
 	orpStreamBase(orpStreamType type, struct orpCodec_t *codec);
 	~orpStreamBase();
 
-	void SetKeys(struct orpKey_t *key);
+	void SetKeys(const struct orpKey_t *key);
 	void SetClockFrequency(Uint32 freq) { clock_freq = freq; };
-	void SetSiblingBuffer(orpStreamBase *sibling) { buffer->sibling = sibling->GetBuffer(); };
+	void SetSibling(orpStreamBase *sibling) { buffer->sibling = sibling->GetBuffer(); };
 
-	void Connect(string host, Uint16 port, string url, string session_id);
-
-	string GetHost(void) { return host; };
+	const char *GetHost(void) { return url.c_str(); };
 	Uint16 GetPort(void) { return port; };
-	string GetUrl(void) { return url; };
-	string GetSessionId(void) { return session_id; };
+	const char *GetUrl(void) { return url.c_str(); };
+	const char *GetSessionId(void) { return session_id.c_str(); };
 	Uint32 GetClockFrequency(void) { return clock_freq; };
 	orpStreamBuffer *GetBuffer(void) { return buffer; };
+	const char *GetCodecName(void) { return codec->name.c_str(); };
+	const char *GetAuthKey(orpAuthType type = orpAUTH_NORMAL);
+	struct orpKey_t *GetKeys(void) { return &key; };
+	AES_KEY *GetDecryptKey(void) { return &aes_key; };
 
 protected:
 	orpStreamType type;
@@ -61,7 +63,6 @@ protected:
 	struct orpKey_t key;
 	orpStreamBuffer *buffer;
 	SDL_Thread *thread_connection;
-	SDL_Thread *thread_decode;
 };
 
 class orpStreamAudio : public orpStreamBase
@@ -78,6 +79,8 @@ public:
 	Sint32 GetSampleRate(void) { return sample_rate; };
 	Sint32 GetBitRate(void) { return bit_rate; };
 
+	int Connect(string host, Uint16 port, string url, string session_id);
+
 protected:
 	Sint32 channels;
 	Sint32 sample_rate;
@@ -90,12 +93,17 @@ public:
 	orpStreamVideo(struct orpCodec_t *codec);
 	~orpStreamVideo();
 
-	void SetFrameDelay(float rate) { frame_delay = (Uint32)(1000.0f / rate); };
+	void SetFrameDelay(double rate) { frame_delay = (Uint32)(1000.0 / rate); };
 
 	Uint32 GetFrameDelay(void) { return frame_delay; };
 
+	int Connect(string host, Uint16 port, string url, string session_id);
+
 protected:
 	Uint32 frame_delay;
+	SDL_Thread *thread_decode;
+	bool terminate;
+	SDL_cond *cond_decode;
 };
 
 #endif // _ORP_H
