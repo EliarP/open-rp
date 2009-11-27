@@ -430,11 +430,13 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 	memcpy(packet->pkt.data, bp, packet->pkt.size);
 	delete [] buffer;
 
+	bool video_key_frame = false;
 	struct orpKey_t *key = stream->GetKeys();
-
+#if 1
 	// Decrypt h2.64 video key-frames
 	if ((packet->header.magic[1] == 0xff || packet->header.magic[1] == 0xfe)
 		&& packet->header.unk6 == 0x0401) {
+		video_key_frame = true;
 		memcpy(key->iv1, key->xor_nonce, ORP_KEY_LEN);
 		AES_cbc_encrypt(packet->pkt.data, packet->pkt.data,
 			packet->pkt.size - (packet->pkt.size % ORP_KEY_LEN),
@@ -462,6 +464,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 	// Decrypt MPEG4 video key-frames
 	else if (packet->header.magic[1] == 0xfb && (
 		packet->header.unk6 == 0x0001 || packet->header.unk6 == 0x0401)) {
+		video_key_frame = true;
 		memcpy(key->iv1, key->xor_nonce, ORP_KEY_LEN);
 		AES_cbc_encrypt(packet->pkt.data, packet->pkt.data,
 			packet->pkt.size - (packet->pkt.size % ORP_KEY_LEN),
@@ -478,14 +481,46 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 #ifdef ORP_DUMP_STREAM_DATA
 	fwrite(packet->pkt.data, 1, packet->pkt.size, _config->h_data);
 #endif
-
+#endif
 	// Push stream packet
 #if 0
-	SDL_LockMutex(sb->lock);
-	sb->pkt.push(packet);
-	SDL_CondSignal(sb->cond);
-	SDL_UnlockMutex(sb->lock);
+	Uint32 mc, sc, duration;
+	if (stream->GetType() == ST_VIDEO) {
+		stream->GetBuffer()->GetDuration(duration);
+		if (duration == 0 && !video_key_frame) {
+			orpPrintf("discarding video frame: video buffer empty and not a key frame.\n");
+			delete [] packet->pkt.data;
+			delete packet;
+			return (size * nmemb);
+		}
+		stream->GetSiblingClock(sc);
+		if (sc != 0 && sc < stream->GetClock(mc)) {
+			double v = (double)mc / (double)stream->GetClockFrequency();
+			double a = (double)sc / (double)stream->GetSibling()->GetClockFrequency();
+			Uint32 delay = (Uint32)((v - a) * 1000.0);
+			orpPrintf("video clock ahead by: %.02fs, delay: %u\n",
+				v - a, delay);
+			SDL_Delay(delay);
+		}
+	} else {
+		if (stream->GetSibling()->GetBuffer()->GetDuration(duration) == 0) {
+			SDL_PauseAudio(1);
+			orpPrintf("discarding audio frame: video buffer empty.\n");
+			delete [] packet->pkt.data;
+			delete packet;
+			return (size * nmemb);
+		}
+		if (stream->GetBuffer()->IsBufferFull()) SDL_PauseAudio(0);
+//		stream->GetSiblingClock(sc);
+//		if (SDL_Swap32(packet->header.clock) < sc) {
+//			orpPrintf("discarding audio frame: older than last video frame.\n");
+//			delete [] packet->pkt.data;
+//			delete packet;
+//			return (size * nmemb);
+//		}
+	}
 #endif
+	sb->Push(stream, packet);
 
 	return (size * nmemb);
 }
@@ -502,171 +537,86 @@ static bool orpDecodeKey(Uint8 *dst, const string &src)
 
 static SDL_mutex *orpGlobalMutex = NULL;
 
-#if 0
-static Sint32 orpThreadVideoDecode(void *config)
+static Sint32 orpThreadVideoDecode(void *_stream)
 {
-	struct orpThreadVideoDecode_t *_config =
-		(struct orpThreadVideoDecode_t *)config;
-	struct orpStreamPacket_t *packet;
-
-//	Uint32 fps = (Uint32)(1000 / 30);
-
-	SDL_LockMutex(orpGlobalMutex);
-	AVCodecContext *context = avcodec_alloc_context();
-	if (avcodec_open(context, _config->codec) < 0) {
-		SDL_UnlockMutex(orpGlobalMutex);
-		return -1;
-	}
-	SDL_UnlockMutex(orpGlobalMutex);
-
-	AVFrame *frame;
-	frame = avcodec_alloc_frame();
-
-	struct SwsContext *sws_normal;
-	struct SwsContext *sws_medium;
-	struct SwsContext *sws_large;
-	struct SwsContext *sws_fullscreen;
-	sws_normal = sws_getContext(ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
-		context->pix_fmt, ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
-		PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
-	sws_medium = sws_getContext(ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
-		context->pix_fmt,
-			(int)(ORP_FRAME_WIDTH * 1.5), (int)(ORP_FRAME_HEIGHT * 1.5),
-		PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
-	sws_large = sws_getContext(ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
-		context->pix_fmt, ORP_FRAME_WIDTH * 2, ORP_FRAME_HEIGHT * 2,
-		PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
-	sws_fullscreen = sws_getContext(ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
-		context->pix_fmt, _config->view->fs.w, _config->view->fs.h,
-		PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
-
+	orpStreamVideo *stream = (orpStreamVideo *)_stream;
+	orpStreamBuffer *buffer = stream->GetBuffer();
+	struct orpView_t *view = stream->GetView();
 	Sint32 bytes_decoded, frame_done = 0;
 
-	while (!_config->terminate) {
-		Uint32 ticks = SDL_GetTicks();
-		SDL_LockMutex(_config->stream->lock);
-		Uint32 packets = _config->stream->pkt.size();
-		SDL_LockMutex(_config->clock->lock);
-		_config->clock->video_queue = packets;
-		SDL_UnlockMutex(_config->clock->lock);
-		if (packets == 0)
-			SDL_CondWait(_config->stream->cond, _config->stream->lock);
-		if (_config->terminate) {
-			SDL_UnlockMutex(_config->stream->lock);
-			break;
-		}
-
-		if (packets) {
-			packet = _config->stream->pkt.front();
-			_config->stream->pkt.pop();
-		} else packet = NULL;
-		SDL_UnlockMutex(_config->stream->lock);
-
-		if (!packet) continue;
-#ifdef ORP_DISABLE_VIDEO
-		delete [] packet->pkt.data;
-		delete packet;
-		continue;
-#endif
-		Uint32 clock = SDL_Swap32(packet->header.clock);
-		if (!_config->clock_offset ||
-			clock < _config->clock_offset) {
-			_config->clock_offset = clock;
-			_config->clock->master = 0;
-		}
-		SDL_LockMutex(_config->clock->lock);
-		_config->clock->video = clock - _config->clock_offset;
-		SDL_UnlockMutex(_config->clock->lock);
-
-		bytes_decoded = avcodec_decode_video2(context,
-			frame, &frame_done, &packet->pkt);
-
-		if (bytes_decoded != -1 && frame_done) {
-			SDL_LockMutex(_config->view->lock);
-			if (!_config->view->overlay) {
-				SDL_UnlockMutex(_config->view->lock);
-				return -1;
-			}
-			SDL_LockYUVOverlay(_config->view->overlay);
-
-			AVPicture p;
-			p.data[0] = _config->view->overlay->pixels[0];
-			p.data[1] = _config->view->overlay->pixels[2];
-			p.data[2] = _config->view->overlay->pixels[1];
-
-			p.linesize[0] = _config->view->overlay->pitches[0];
-			p.linesize[1] = _config->view->overlay->pitches[2];
-			p.linesize[2] = _config->view->overlay->pitches[1];
-
-			if (_config->view->size == VIEW_NORMAL) {
-				sws_scale(sws_normal,
-					frame->data, frame->linesize, 0, context->height,
-					p.data, p.linesize);
-			} else if (_config->view->size == VIEW_MEDIUM) {
-				sws_scale(sws_medium,
-					frame->data, frame->linesize, 0, context->height,
-					p.data, p.linesize);
-			} else if (_config->view->size == VIEW_LARGE) {
-				sws_scale(sws_large,
-					frame->data, frame->linesize, 0, context->height,
-					p.data, p.linesize);
-			} else if (_config->view->size == VIEW_FULLSCREEN) {
-				sws_scale(sws_fullscreen,
-					frame->data, frame->linesize, 0, context->height,
-					p.data, p.linesize);
-			}
-
-			SDL_Rect rect;
-			rect.x = 0;
-			if (_config->view->size == VIEW_FULLSCREEN) {
-				rect.y = _config->view->fs.y;
-				rect.w = _config->view->fs.w;
-				rect.h = _config->view->fs.h;
-			} else {
-				rect.y = 0;
-				rect.w = _config->view->scale.w;
-				rect.h = _config->view->scale.h;
-			}
-
-			if (_config->view->status_sticky ||
-				_config->view->status_ticks >= SDL_GetTicks()) {
-				SDL_Rect src, dst;
-				src.x = src.y = 0;
-				src.w = _config->view->status_bg->w;
-				src.h = _config->view->status_bg->h;
-				dst.x = 0;
-				dst.y = rect.h - _config->view->status_bg->h;
-				dst.w = _config->view->status_bg->w;
-				dst.h = _config->view->status_bg->h;
-				SDL_BlitOverlay(_config->view->status_yuv, &src,
-					_config->view->overlay, &dst);
-			}
-			SDL_DisplayYUVOverlay(_config->view->overlay, &rect);
-			SDL_UnlockMutex(_config->view->lock);
-
-			SDL_LockMutex(_config->clock->lock);
-			Uint32 decode = _config->clock->decode = SDL_GetTicks() - ticks;
-			SDL_UnlockMutex(_config->clock->lock);
-
-			Uint32 delay = (1000 / _config->frame_rate) - decode;
-			if (delay > 0) SDL_Delay(delay);
-		}
-
-		delete [] packet->pkt.data;
-		delete packet;
+	AVFrame *frame = avcodec_alloc_frame();
+	if (!frame) {
+		orpPrintf("Error allocating AVFrame.\n");
+		return -1;
 	}
 
-	av_free(frame);
-	SDL_LockMutex(orpGlobalMutex);
-	avcodec_close(context);
-	SDL_UnlockMutex(orpGlobalMutex);
-	sws_freeContext(sws_normal);
-	sws_freeContext(sws_medium);
-	sws_freeContext(sws_large);
-	sws_freeContext(sws_fullscreen);
+	while (!stream->ShouldTerminate()) {
+		orpPrintf("Waiting on video buffer.\n");
+		if (buffer->WaitOnBuffer() != 0) {
+			orpPrintf("Error waiting on video buffer.\n");
+			return -1;
+		}
+		orpPrintf("Reading from video buffer.\n");
+		while (!stream->ShouldTerminate()) {
+			Uint32 ticks = SDL_GetTicks();
+			struct orpStreamPacket_t *packet = buffer->Pop();
+			if (!packet) break;
+
+			bytes_decoded = avcodec_decode_video2(
+				stream->GetContext(),
+				frame, &frame_done, &packet->pkt);
+
+			if (bytes_decoded != -1 && frame_done) {
+				SDL_LockMutex(view->lock);
+				if (!view->overlay) {
+					SDL_UnlockMutex(view->lock);
+					return -1;
+				}
+				SDL_LockYUVOverlay(view->overlay);
+
+				stream->ScaleFrame(frame);
+
+				SDL_Rect rect;
+				rect.x = 0;
+				if (view->size == VIEW_FULLSCREEN) {
+					rect.y = view->fs.y;
+					rect.w = view->fs.w;
+					rect.h = view->fs.h;
+				} else {
+					rect.y = 0;
+					rect.w = view->scale.w;
+					rect.h = view->scale.h;
+				}
+
+				if (view->status_sticky ||
+					view->status_ticks >= SDL_GetTicks()) {
+					SDL_Rect src, dst;
+					src.x = src.y = 0;
+					src.w = view->status_bg->w;
+					src.h = view->status_bg->h;
+					dst.x = 0;
+					dst.y = rect.h - view->status_bg->h;
+					dst.w = view->status_bg->w;
+					dst.h = view->status_bg->h;
+					SDL_BlitOverlay(view->status_yuv, &src,
+						view->overlay, &dst);
+				}
+				SDL_DisplayYUVOverlay(view->overlay, &rect);
+				SDL_UnlockMutex(view->lock);
+			}
+
+			delete [] packet->pkt.data;
+			delete packet;
+
+			Uint32 decode = SDL_GetTicks() - ticks;
+			Uint32 delay = stream->GetFrameDelay() - decode;
+			if ((Sint32)delay > 0) SDL_Delay(delay);
+		}
+	}
+
+	orpPrintf("Exit video decode thread.\n");
 	return 0;
 }
-#endif 
 
 static Sint32 orpThreadVideoConnection(void *_stream)
 {
@@ -750,189 +700,37 @@ static Sint32 orpThreadVideoConnection(void *_stream)
 	return 0;
 }
 
-#if 0
-static void orpAudioFeed(void *config, Uint8 *stream, int len)
+static void orpCallbackAudioDecode(void *_stream, Uint8 *audio, int req_len)
 {
-	struct orpConfigAudioFeed_t *_config =
-		(struct orpConfigAudioFeed_t *)config;
+	orpStreamAudio *stream = (orpStreamAudio *)_stream;
+	orpStreamBuffer *buffer = stream->GetBuffer();
 
-	struct orpAudioFrame_t *frame = NULL;
-
-	SDL_LockMutex(_config->lock);
-	if (_config->frame.size()) {
-		frame = _config->frame.front();
-		_config->frame.pop();
-	} else memset(stream, 0, len);
-	if (_config->clock)
-		_config->clock->audio_queue = _config->frame.size();
-	SDL_UnlockMutex(_config->lock);
-
-	if (!frame) return;
-
-	if (_config->clock) {
-		SDL_LockMutex(_config->clock->lock);
-		if (!_config->clock_offset ||
-			frame->clock < _config->clock_offset) {
-			_config->clock_offset = frame->clock;
-			_config->clock->master = 0;
-		}
-		_config->clock->audio = frame->clock - _config->clock_offset;
-		SDL_UnlockMutex(_config->clock->lock);
+	Uint32 duration;
+	if (buffer->GetDuration(duration) == 0) {
+		memset(audio, 0, req_len);
+		return;
 	}
 
-	memcpy(stream, frame->data, len);
-	delete [] frame->data;
-	delete frame;
-}
-
-static AVCodecContext *orpInitAudioCodec(AVCodec *codec, Sint32 channels, Sint32 sample_rate, Sint32 bit_rate)
-{
-	SDL_LockMutex(orpGlobalMutex);
-	AVCodecContext *context = avcodec_alloc_context();
-	context->channels = channels;
-	context->sample_rate = sample_rate;
-	if (codec->id == CODEC_ID_ATRAC3) {
-		struct atrac3_config_t {
-			Uint16 unk0;	// 2
-			Uint32 unk1;	// 6
-			Uint16 unk2;	// 8
-			Uint16 unk3;	// 10
-			Uint16 unk4;	// 12
-			Uint16 unk5;	// 14
-		};
-		struct atrac3_config_t *at3_config;
-		at3_config = (struct atrac3_config_t *)av_malloc(sizeof(struct atrac3_config_t));
-		memset(at3_config, 0, sizeof(struct atrac3_config_t));
-		at3_config->unk0 = 1;
-		at3_config->unk1 = 1024;
-		at3_config->unk2 = 1;
-		at3_config->unk3 = 1;
-		at3_config->unk4 = 1;
-		at3_config->unk5 = 0;
-		context->extradata = (Uint8 *)at3_config;
-		context->extradata_size = 14;
-		context->block_align = 192 * channels;
-		context->bit_rate = bit_rate;
+	struct orpStreamPacket_t *packet = buffer->Pop();
+	if (!packet) {
+		memset(audio, 0, req_len);
+		return;
 	}
-
-	if (avcodec_open(context, codec) < 0) {
-		if (codec->id == CODEC_ID_ATRAC3) av_free(context->extradata);
-		av_free(context);
-		SDL_UnlockMutex(orpGlobalMutex);
-		orpPrintf("codec context initialization failed.\n");
-		return NULL;
-	}
-	SDL_UnlockMutex(orpGlobalMutex);
-
-	return context;
-}
-
-static Sint32 orpThreadAudioDecode(void *config)
-{
-	struct orpThreadAudioDecode_t *_config =
-		(struct orpThreadAudioDecode_t *)config;
-	struct orpStreamPacket_t *packet;
-
-	if (!_config->codec) return -1;
-
-	AVCodecContext *context;
-	if (!(context = orpInitAudioCodec(_config->codec, _config->channels,
-		_config->sample_rate, _config->bit_rate))) return -1;
 
 	Sint32 bytes_decoded, frame_size;
-	Uint8 buffer[(AVCODEC_MAX_AUDIO_FRAME_SIZE * 3) / 2];
+	Uint8 frame[(AVCODEC_MAX_AUDIO_FRAME_SIZE * 3) / 2];
 
-	struct orpConfigAudioFeed_t feed;
-	feed.channels = _config->channels;
-	feed.sample_rate = _config->sample_rate;
-	feed.clock_offset = 0;
-	feed.clock = _config->clock;
-	feed.lock = SDL_CreateMutex();
+	frame_size = sizeof(frame);
+	bytes_decoded = avcodec_decode_audio3(stream->GetContext(),
+		(Sint16 *)frame, &frame_size, &packet->pkt);
+	if (bytes_decoded != -1 && frame_size)
+		memcpy(audio, frame, req_len);
+	else
+		memset(audio, 0, req_len);
 
-	SDL_AudioSpec spec, spec_req;
-	spec_req.freq = _config->sample_rate;
-	spec_req.format = AUDIO_S16SYS;
-	spec_req.channels = _config->channels;
-	spec_req.silence = 0;
-	spec_req.samples = ORP_AUDIO_BUF_LEN;
-	spec_req.callback = orpAudioFeed;
-	spec_req.userdata = (void *)&feed;
-
-	if(SDL_OpenAudio(&spec_req, &spec) == -1) {
-		orpPrintf("SDL_OpenAudio: %s\n", SDL_GetError());
-		return -1;
-	}
-
-	Sint32 decode_errors = 0;
-	SDL_PauseAudio(0);
-
-	while (!_config->terminate) {
-		SDL_LockMutex(_config->stream->lock);
-		Uint32 packets = _config->stream->pkt.size();
-		if (packets == 0)
-			SDL_CondWait(_config->stream->cond, _config->stream->lock);
-		if (_config->terminate) {
-			SDL_UnlockMutex(_config->stream->lock);
-			break;
-		}
-
-		if (_config->stream->pkt.size()) {
-			packet = _config->stream->pkt.front();
-			_config->stream->pkt.pop();
-		} else packet = NULL;
-		SDL_UnlockMutex(_config->stream->lock);
-
-		if (!packet) continue;
-#ifdef ORP_DISABLE_AUDIO
-		delete [] packet->pkt.data;
-		delete packet;
-		continue;
-#endif
-		frame_size = sizeof(buffer);
-		bytes_decoded = avcodec_decode_audio3(context,
-			(Sint16 *)buffer, &frame_size, &packet->pkt);
-		if (bytes_decoded != -1 && frame_size) {
-			struct orpAudioFrame_t *audioFrame =
-				new struct orpAudioFrame_t;
-		
-			audioFrame->len = (Uint32)frame_size;
-			audioFrame->data = new Uint8[audioFrame->len];
-			audioFrame->clock = SDL_Swap32(packet->header.clock);
-			memcpy(audioFrame->data, buffer, audioFrame->len);
-
-			SDL_LockMutex(feed.lock);
-			feed.frame.push(audioFrame);
-			SDL_UnlockMutex(feed.lock);
-
-			decode_errors = 0;
-		} else if (decode_errors > 5) {
-			SDL_LockMutex(orpGlobalMutex);
-			if (_config->codec->id == CODEC_ID_ATRAC3)
-				av_free(context->extradata);
-			avcodec_close(context);
-			SDL_UnlockMutex(orpGlobalMutex);
-			if (!(context = orpInitAudioCodec(
-				_config->codec, _config->channels,
-				_config->sample_rate, _config->bit_rate))) return -1;
-			decode_errors = 0;
-			orpPrintf("%s: reset.\n", _config->codec->name);
-		} else decode_errors++;
-
-		delete [] packet->pkt.data;
-		delete packet;
-	}
-	
-	SDL_PauseAudio(1);
-	SDL_CloseAudio();
-	SDL_DestroyMutex(feed.lock);
-	SDL_LockMutex(orpGlobalMutex);
-	if (_config->codec->id == CODEC_ID_ATRAC3)
-		av_free(context->extradata);
-	avcodec_close(context);
-	SDL_UnlockMutex(orpGlobalMutex);
-	return 0;
+	delete [] packet->pkt.data;
+	delete packet;
 }
-#endif 
 
 static Sint32 orpThreadAudioConnection(void *_stream)
 {
@@ -1017,36 +815,90 @@ static Sint32 orpThreadAudioConnection(void *_stream)
 }
 
 orpStreamBuffer::orpStreamBuffer()
-	: clock(0), lock(NULL), period(0), len(0), pos(0), data(NULL),
-	sibling(NULL)
+	: clock(0), lock(NULL), period(90000),
+	len(0), pos(0), data(NULL), sibling(NULL)
 {
 	lock = SDL_CreateMutex();
+	cond_buffer_full = SDL_CreateCond();
+	lock_buffer_full = SDL_CreateMutex();
 }
 
 orpStreamBuffer::~orpStreamBuffer()
 {
 	if (lock) SDL_DestroyMutex(lock);
+	if (cond_buffer_full) SDL_DestroyCond(cond_buffer_full);
 }
 
-void orpStreamBuffer::Push(struct orpStreamPacket_t *pkt)
+void orpStreamBuffer::Push(orpStreamBase *stream, struct orpStreamPacket_t *packet)
 {
+	Uint32 duration = 0;
+	Uint32 timestamp = SDL_Swap32(packet->header.clock);
+
+	bool warn = false;
+	while (GetDuration(duration) > period) {
+		SDL_CondSignal(cond_buffer_full);
+//		SDL_Delay(15);
+//		if (!warn) { orpPrintf("%s: buffer full: %u > %u\n",
+//			stream->GetCodecName(), duration, period); warn = true; }
+//		Pop();
+		break;
+	}
+
+	SDL_LockMutex(lock);
+
+	pkt.push(packet);
+	clock = timestamp;
+	duration = UpdateDuration();
+	if (duration > period) SDL_CondSignal(cond_buffer_full);
+
+	SDL_UnlockMutex(lock);
 }
 
 struct orpStreamPacket_t *orpStreamBuffer::Pop(void)
 {
-	return NULL;
+	orpStreamPacket_t *packet = NULL;
+
+	SDL_LockMutex(lock);
+
+	if (pkt.size()) {
+		packet = pkt.front();
+		pkt.pop();
+	}
+
+	UpdateDuration();
+	SDL_UnlockMutex(lock);
+
+	return packet;
 }
 
-void orpStreamBuffer::Lock(void)
+Uint32 orpStreamBuffer::GetClock(Uint32 &clock)
 {
+	SDL_LockMutex(lock);
+	clock = this->clock;
+	SDL_UnlockMutex(lock);
+	return clock;
 }
 
-void orpStreamBuffer::Unlock(void)
+Uint32 orpStreamBuffer::GetDuration(Uint32 &duration)
 {
+	SDL_LockMutex(lock);
+	duration = this->duration;
+	SDL_UnlockMutex(lock);
+	return duration;
+}
+
+Uint32 orpStreamBuffer::UpdateDuration(void)
+{
+	duration = 0;
+	if (pkt.size() > 1) {
+		duration = SDL_Swap32(pkt.back()->header.clock) -
+			SDL_Swap32(pkt.front()->header.clock);
+	}
+	return duration;
 }
 
 orpStreamBase::orpStreamBase(orpStreamType type, struct orpCodec_t *codec)
-	: type(type), codec(codec), clock_freq(0),
+	: type(type), codec(codec), clock_freq(0), sibling(NULL),
 	thread_connection(NULL)
 {
 	memset(&key, 0, sizeof(struct orpKey_t));
@@ -1055,10 +907,10 @@ orpStreamBase::orpStreamBase(orpStreamType type, struct orpCodec_t *codec)
 
 orpStreamBase::~orpStreamBase()
 {
-	delete buffer;
 	Sint32 thread_result;
 	if (thread_connection)
 		SDL_WaitThread(thread_connection, &thread_result);
+	delete buffer;
 }
 
 void orpStreamBase::SetKeys(const struct orpKey_t *key)
@@ -1079,18 +931,112 @@ const char *orpStreamBase::GetAuthKey(enum orpAuthType type)
 	return (const char *)key.auth_normal;
 }
 
+Sint32 orpStreamBase::Connect(string host, Uint16 port, string url, string session_id)
+{
+	this->host = host;
+	this->port = port;
+	this->url = url;
+	this->session_id = session_id;
+	return 0;
+}
+
 orpStreamAudio::orpStreamAudio(struct orpCodec_t *codec)
 	: orpStreamBase(ST_AUDIO, codec),
-	channels(0), sample_rate(0), bit_rate(0)
+	channels(0), sample_rate(0), bit_rate(0), context(NULL)
 {
 }
 
 orpStreamAudio::~orpStreamAudio()
 {
+	CloseDevice();
+	CloseDecoder();
 }
 
-int orpStreamAudio::Connect(string host, Uint16 port, string url, string session_id)
+Sint32 orpStreamAudio::InitDevice(void)
 {
+	SDL_AudioSpec spec, req_spec;
+	req_spec.freq = sample_rate;
+	req_spec.format = AUDIO_S16SYS;
+	req_spec.channels = channels;
+	req_spec.silence = 0;
+	req_spec.samples = ORP_AUDIO_BUF_LEN;
+	req_spec.callback = orpCallbackAudioDecode;
+	req_spec.userdata = (void *)this;
+
+	if(SDL_OpenAudio(&req_spec, &spec) == -1) {
+		orpPrintf("SDL_OpenAudio: %s\n", SDL_GetError());
+		return -1;
+	}
+
+	SDL_PauseAudio(0);
+
+	return 0;
+}
+
+Sint32 orpStreamAudio::InitDecoder(void)
+{
+	SDL_LockMutex(orpGlobalMutex);
+	context = avcodec_alloc_context();
+	context->channels = channels;
+	context->sample_rate = sample_rate;
+	if (codec->codec->id == CODEC_ID_ATRAC3) {
+		struct atrac3_config_t {
+			Uint16 unk0;	// 2
+			Uint32 unk1;	// 6
+			Uint16 unk2;	// 8
+			Uint16 unk3;	// 10
+			Uint16 unk4;	// 12
+			Uint16 unk5;	// 14
+		};
+		struct atrac3_config_t *at3_config;
+		at3_config = (struct atrac3_config_t *)av_malloc(sizeof(struct atrac3_config_t));
+		memset(at3_config, 0, sizeof(struct atrac3_config_t));
+		at3_config->unk0 = 1;
+		at3_config->unk1 = 1024;
+		at3_config->unk2 = 1;
+		at3_config->unk3 = 1;
+		at3_config->unk4 = 1;
+		at3_config->unk5 = 0;
+		context->extradata = (Uint8 *)at3_config;
+		context->extradata_size = 14;
+		context->block_align = 192 * channels;
+		context->bit_rate = bit_rate;
+	}
+
+	if (avcodec_open(context, codec->codec) < 0) {
+		if (codec->codec->id == CODEC_ID_ATRAC3)
+			av_free(context->extradata);
+		av_free(context);
+		SDL_UnlockMutex(orpGlobalMutex);
+		orpPrintf("%s: codec context initialization failed.\n",
+			codec->name.c_str());
+		return -1;
+	}
+	SDL_UnlockMutex(orpGlobalMutex);
+
+	return 0;
+}
+
+void orpStreamAudio::CloseDevice(void)
+{
+	SDL_CloseAudio();
+}
+
+void orpStreamAudio::CloseDecoder(void)
+{
+	if (!context) return;
+	SDL_LockMutex(orpGlobalMutex);
+	if (codec->codec->id == CODEC_ID_ATRAC3)
+		av_free(context->extradata);
+	avcodec_close(context);
+	SDL_UnlockMutex(orpGlobalMutex);
+	context = NULL;
+}
+
+Sint32 orpStreamAudio::Connect(string host, Uint16 port, string url, string session_id)
+{
+	orpStreamBase::Connect(host, port, url, session_id);
+	if (InitDevice() != 0 || InitDecoder() != 0) return -1;
 	thread_connection = SDL_CreateThread(orpThreadAudioConnection,
 		(void *)this);
 	if (!thread_connection) return -1;
@@ -1101,25 +1047,102 @@ orpStreamVideo::orpStreamVideo(struct orpCodec_t *codec)
 	: orpStreamBase(ST_VIDEO, codec), terminate(false),
 	frame_delay(0), thread_decode(NULL)
 {
-	cond_decode = SDL_CreateCond();
 }
 
 orpStreamVideo::~orpStreamVideo()
 {
 	terminate = true;
-	SDL_CondBroadcast(cond_decode);
+	buffer->Broadcast();
 
 	Sint32 thread_result;
 	if (thread_decode) SDL_WaitThread(thread_decode, &thread_result);
 
-	SDL_DestroyCond(cond_decode);
+	CloseDecoder();
 }
 
-int orpStreamVideo::Connect(string host, Uint16 port, string url, string session_id)
+Sint32 orpStreamVideo::InitDecoder(void)
 {
+	SDL_LockMutex(orpGlobalMutex);
+	context = avcodec_alloc_context();
+	if (avcodec_open(context, codec->codec) < 0) {
+		SDL_UnlockMutex(orpGlobalMutex);
+		return -1;
+	}
+	SDL_UnlockMutex(orpGlobalMutex);
+
+	sws_normal = sws_getContext(ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
+		context->pix_fmt, ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
+		PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
+	sws_medium = sws_getContext(ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
+		context->pix_fmt,
+			(int)(ORP_FRAME_WIDTH * 1.5), (int)(ORP_FRAME_HEIGHT * 1.5),
+		PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
+	sws_large = sws_getContext(ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
+		context->pix_fmt, ORP_FRAME_WIDTH * 2, ORP_FRAME_HEIGHT * 2,
+		PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
+	sws_fullscreen = sws_getContext(ORP_FRAME_WIDTH, ORP_FRAME_HEIGHT,
+		context->pix_fmt, view->fs.w, view->fs.h,
+		PIX_FMT_YUV420P, SWS_BICUBIC, NULL, NULL, NULL);
+
+	return 0;
+}
+
+void orpStreamVideo::ScaleFrame(AVFrame *f)
+{
+	AVPicture p;
+	p.data[0] = view->overlay->pixels[0];
+	p.data[1] = view->overlay->pixels[2];
+	p.data[2] = view->overlay->pixels[1];
+
+	p.linesize[0] = view->overlay->pitches[0];
+	p.linesize[1] = view->overlay->pitches[2];
+	p.linesize[2] = view->overlay->pitches[1];
+
+	if (view->size == VIEW_NORMAL) {
+		sws_scale(sws_normal,
+			f->data, f->linesize, 0, context->height,
+			p.data, p.linesize);
+	} else if (view->size == VIEW_MEDIUM) {
+		sws_scale(sws_medium,
+			f->data, f->linesize, 0, context->height,
+			p.data, p.linesize);
+	} else if (view->size == VIEW_LARGE) {
+		sws_scale(sws_large,
+			f->data, f->linesize, 0, context->height,
+			p.data, p.linesize);
+	} else if (view->size == VIEW_FULLSCREEN) {
+		sws_scale(sws_fullscreen,
+			f->data, f->linesize, 0, context->height,
+			p.data, p.linesize);
+	}
+}
+
+void orpStreamVideo::CloseDecoder(void)
+{
+	if (context) {
+		SDL_LockMutex(orpGlobalMutex);
+		avcodec_close(context);
+		SDL_UnlockMutex(orpGlobalMutex);
+		context = NULL;
+	}
+
+	if (sws_normal) sws_freeContext(sws_normal);
+	if (sws_medium) sws_freeContext(sws_medium);
+	if (sws_large) sws_freeContext(sws_large);
+	if (sws_fullscreen) sws_freeContext(sws_fullscreen);
+	sws_normal = sws_medium = sws_large = sws_fullscreen = NULL;
+}
+
+Sint32 orpStreamVideo::Connect(string host, Uint16 port, string url, string session_id)
+{
+	orpStreamBase::Connect(host, port, url, session_id);
+	if (InitDecoder() != 0) return -1;
 	thread_connection = SDL_CreateThread(orpThreadVideoConnection,
 		(void *)this);
 	if (!thread_connection) return -1;
+	thread_decode = SDL_CreateThread(orpThreadVideoDecode,
+		(void *)this);
+	if (!thread_decode) return -1;
 	return 0;
 }
 
@@ -2842,6 +2865,7 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 
 	stream_audio->SetSibling(stream_video);
 	stream_video->SetSibling(stream_audio);
+	stream_video->SetView(&view);
 
 	os.str("");
 	os << "http://";
@@ -2911,8 +2935,10 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 		orpPrintf("Session terminated.\n");
 
 	// TODO: Free, clean-up everything, being really lazy here...
-	if (stream_audio) delete stream_audio;
+	SDL_CloseAudio();
+
 	if (stream_video) delete stream_video;
+	if (stream_audio) delete stream_audio;
 #if 0
 #ifdef ORP_DUMP_STREAM_HEADER
 	if (videoConfig->h_header) fclose(videoConfig->h_header);

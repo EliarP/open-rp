@@ -1,6 +1,6 @@
 # Generic Linux build configuration
 CXX=g++
-OS_CFLAGS=-Wunused $(shell $(BUILD_ROOT)/bin/sdl-config --cflags) $(shell $(BUILD_ROOT)/bin/curl-config --cflags) $(shell $(BUILD_ROOT)/bin/libpng-config --cflags)
+OS_CFLAGS=-g -Wunused $(shell $(BUILD_ROOT)/bin/sdl-config --cflags) $(shell $(BUILD_ROOT)/bin/curl-config --cflags) $(shell $(BUILD_ROOT)/bin/libpng-config --cflags)
 OS_LDFLAGS=
 OS_SDL_SHARED=$(shell grep "^EXTRA_LDFLAGS" ./packages.d/work/SDL-*/Makefile | head -n 1 | sed -e 's/^EXTRA_LDFLAGS[[:space:]]*=[[:space:]]*\(.*\)$$/\1/')
 OS_LIBS=$(BUILD_ROOT)/lib/libSDL.a $(BUILD_ROOT)/lib/libSDL_image.a $(BUILD_ROOT)/lib/libpng.a $(BUILD_ROOT)/lib/libSDL_net.a $(BUILD_ROOT)/lib/libSDL_ttf.a $(BUILD_ROOT)/lib/libfreetype.a $(BUILD_ROOT)/lib/libcrypto.a $(BUILD_ROOT)/lib/libavformat.a $(BUILD_ROOT)/lib/libavcodec.a $(BUILD_ROOT)/lib/libswscale.a $(BUILD_ROOT)/lib/libavutil.a $(BUILD_ROOT)/lib/libfaad.a $(BUILD_ROOT)/lib/libcurl.a -ldl -lz -lm -lpthread -lrt $(OS_SDL_SHARED)
