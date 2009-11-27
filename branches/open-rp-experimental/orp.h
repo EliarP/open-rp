@@ -495,11 +495,6 @@ protected:
 	ostringstream os_caption;
 	string exec_mode;
 
-	SDL_Thread *thread_video_connection;
-	SDL_Thread *thread_video_decode;
-	SDL_Thread *thread_audio_connection;
-	SDL_Thread *thread_audio_decode;
-
 	SDL_Joystick *js;
 
 	TCPsocket skt_pad;
