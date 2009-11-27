@@ -834,7 +834,7 @@ void orpStreamBuffer::Push(orpStreamBase *stream, struct orpStreamPacket_t *pack
 	Uint32 duration = 0;
 	Uint32 timestamp = SDL_Swap32(packet->header.clock);
 
-	bool warn = false;
+//	bool warn = false;
 	while (GetDuration(duration) > period) {
 		SDL_CondSignal(cond_buffer_full);
 //		SDL_Delay(15);
@@ -1225,9 +1225,6 @@ OpenRemotePlay::OpenRemotePlay(struct orpConfig_t *config)
 	oc->name = "AT3";
 	oc->codec = codec;
 	this->codec.push_back(oc);
-
-	memset(&clock, 0, sizeof(struct orpClock_t));
-	clock.lock = SDL_CreateMutex();
 }
 
 OpenRemotePlay::~OpenRemotePlay()
@@ -2836,9 +2833,6 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 		return -1;
 	}
 
-	clock.video_freq = atoi(orpGetHeaderValue(HEADER_VIDEO_CLOCKFREQ, headerList));
-	clock.audio_freq = atoi(orpGetHeaderValue(HEADER_AUDIO_CLOCKFREQ, headerList));
-
 	ps3_nickname = (char *)base64.Decode((const Uint8 *)
 		orpGetHeaderValue(HEADER_PS3_NICKNAME, headerList));
 	if (!ps3_nickname) ps3_nickname = strdup("Unknown");
@@ -2874,8 +2868,6 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	if (stream_video->Connect(config.ps3_addr, config.ps3_port,
 		os.str(), session_id) != 0) return -1;
 
-	// SDL_Delay(250);
-
 	os.str("");
 	os << "http://";
 	os << config.ps3_addr << ":" << config.ps3_port;
@@ -2883,52 +2875,9 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	if (stream_audio->Connect(config.ps3_addr, config.ps3_port,
 		os.str(), session_id) != 0) return -1;
 
-#if 0
-	struct orpThreadVideoDecode_t *videoDecode = new struct orpThreadVideoDecode_t;
-	memset(videoDecode, 0, sizeof(struct orpThreadVideoDecode_t));
-	videoDecode->view = &view;
-	videoDecode->frame_rate =
-		atoi(orpGetHeaderValue(HEADER_VIDEO_FRAMERATE, headerList));
-	videoDecode->codec = codec_video->codec;
-	videoDecode->stream = videoConfig->stream;
-	videoDecode->clock = &clock;
-
-	if (!(thread_video_decode = SDL_CreateThread(orpThreadVideoDecode,
-		videoDecode))) return -1;
-
-	struct orpThreadAudioDecode_t *audioDecode = new struct orpThreadAudioDecode_t;
-	memset(audioDecode, 0, sizeof(struct orpThreadVideoDecode_t));
-	audioDecode->codec = codec_audio->codec;
-	audioDecode->channels =
-		atoi(orpGetHeaderValue(HEADER_AUDIO_CHANNELS, headerList));
-	audioDecode->sample_rate =
-		atoi(orpGetHeaderValue(HEADER_AUDIO_SAMPLERATE, headerList));
-	audioDecode->bit_rate =
-		atoi(orpGetHeaderValue(HEADER_AUDIO_BITRATE, headerList));
-	audioDecode->stream = audioConfig->stream;
-	audioDecode->clock = &clock;
-
-	if (!(thread_audio_decode = SDL_CreateThread(orpThreadAudioDecode,
-		audioDecode))) return -1;
-#endif
-
 	// Hang-out here until something happens...
 	Sint32 result = SessionControl(curl);
 
-	// Shutdown...
-#if 0
-	videoDecode->terminate = audioDecode->terminate = true;
-
-	Sint32 thread_result;
-	SDL_CondBroadcast(videoDecode->stream->cond);
-	SDL_CondBroadcast(audioDecode->stream->cond);
-
-	SDL_WaitThread(thread_video_connection, &thread_result);
-	SDL_WaitThread(thread_audio_connection, &thread_result);
-
-	SDL_WaitThread(thread_video_decode, &thread_result);
-	SDL_WaitThread(thread_audio_decode, &thread_result);
-#endif
 	if (result == EVENT_RESTORE)
 		orpPrintf("Session restore.\n");
 	else
@@ -2938,8 +2887,10 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	SDL_CloseAudio();
 
 	if (stream_video) delete stream_video;
+	stream_video = NULL;
 	if (stream_audio) delete stream_audio;
-#if 0
+	stream_audio = NULL;
+
 #ifdef ORP_DUMP_STREAM_HEADER
 	if (videoConfig->h_header) fclose(videoConfig->h_header);
 	if (audioConfig->h_header) fclose(audioConfig->h_header);
@@ -2951,9 +2902,6 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 #ifdef ORP_DUMP_STREAM_RAW
 	if (videoConfig->h_raw) fclose(videoConfig->h_raw);
 	if (audioConfig->h_raw) fclose(audioConfig->h_raw);
-#endif
-	thread_video_connection = thread_video_decode = NULL;
-	thread_audio_connection = thread_audio_decode = NULL;
 #endif
 	return result;
 }
