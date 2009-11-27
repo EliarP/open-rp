@@ -1149,8 +1149,6 @@ Sint32 orpStreamVideo::Connect(string host, Uint16 port, string url, string sess
 OpenRemotePlay::OpenRemotePlay(struct orpConfig_t *config)
 	: terminate(false), ps3_nickname(NULL), js(NULL),
 	splash(NULL), font_normal(NULL), font_small(NULL),
-	thread_video_connection(NULL), thread_video_decode(NULL),
-	thread_audio_connection(NULL), thread_audio_decode(NULL),
 	stream_audio(NULL), stream_video(NULL)
 {
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
