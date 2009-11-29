@@ -483,9 +483,9 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 #endif
 #endif
 	// Push stream packet
-#if 0
-	Uint32 mc, sc, duration;
+	Uint32 vc, ac, duration;
 	if (stream->GetType() == ST_VIDEO) {
+#if 0
 		stream->GetBuffer()->GetDuration(duration);
 		if (duration == 0 && !video_key_frame) {
 			orpPrintf("discarding video frame: video buffer empty and not a key frame.\n");
@@ -493,16 +493,18 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 			delete packet;
 			return (size * nmemb);
 		}
-		stream->GetSiblingClock(sc);
-		if (sc != 0 && sc < stream->GetClock(mc)) {
-			double v = (double)mc / (double)stream->GetClockFrequency();
-			double a = (double)sc / (double)stream->GetSibling()->GetClockFrequency();
+#endif
+		stream->GetSiblingClock(ac);
+		if (ac != 0 && ac < stream->GetClock(vc)) {
+			double v = (double)vc / (double)stream->GetClockFrequency();
+			double a = (double)ac / (double)stream->GetSibling()->GetClockFrequency();
 			Uint32 delay = (Uint32)((v - a) * 1000.0);
-			orpPrintf("video clock ahead by: %.02fs, delay: %u\n",
-				v - a, delay);
+			//orpPrintf("video clock ahead by: %.02fs, delay: %u\n", v - a, delay / 2);
 			SDL_Delay(delay);
 		}
-	} else {
+	}
+#if 0
+	else {
 		if (stream->GetSibling()->GetBuffer()->GetDuration(duration) == 0) {
 			SDL_PauseAudio(1);
 			orpPrintf("discarding audio frame: video buffer empty.\n");
@@ -510,7 +512,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 			delete packet;
 			return (size * nmemb);
 		}
-		if (stream->GetBuffer()->IsBufferFull()) SDL_PauseAudio(0);
+		if (stream->GetBuffer()->IsBufferReady()) SDL_PauseAudio(0);
 //		stream->GetSiblingClock(sc);
 //		if (SDL_Swap32(packet->header.clock) < sc) {
 //			orpPrintf("discarding audio frame: older than last video frame.\n");
@@ -723,10 +725,13 @@ static void orpCallbackAudioDecode(void *_stream, Uint8 *audio, int req_len)
 	frame_size = sizeof(frame);
 	bytes_decoded = avcodec_decode_audio3(stream->GetContext(),
 		(Sint16 *)frame, &frame_size, &packet->pkt);
-	if (bytes_decoded != -1 && frame_size)
+	if (bytes_decoded != -1 && frame_size) {
 		memcpy(audio, frame, req_len);
-	else
-		memset(audio, 0, req_len);
+		if (frame_size != req_len) {
+			orpPrintf("%s: requested: %u, supplied: %u\n",
+				stream->GetCodecName(), req_len, frame_size);
+		}	
+	} else memset(audio, 0, req_len);
 
 	delete [] packet->pkt.data;
 	delete packet;
@@ -819,37 +824,51 @@ orpStreamBuffer::orpStreamBuffer()
 	len(0), pos(0), data(NULL), sibling(NULL)
 {
 	lock = SDL_CreateMutex();
-	cond_buffer_full = SDL_CreateCond();
-	lock_buffer_full = SDL_CreateMutex();
+	cond_buffer_ready = SDL_CreateCond();
+	lock_buffer_ready = SDL_CreateMutex();
 }
 
 orpStreamBuffer::~orpStreamBuffer()
 {
 	if (lock) SDL_DestroyMutex(lock);
-	if (cond_buffer_full) SDL_DestroyCond(cond_buffer_full);
+	if (cond_buffer_ready) SDL_DestroyCond(cond_buffer_ready);
 }
 
 void orpStreamBuffer::Push(orpStreamBase *stream, struct orpStreamPacket_t *packet)
 {
 	Uint32 duration = 0;
 	Uint32 timestamp = SDL_Swap32(packet->header.clock);
-
-//	bool warn = false;
-	while (GetDuration(duration) > period) {
-		SDL_CondSignal(cond_buffer_full);
-//		SDL_Delay(15);
-//		if (!warn) { orpPrintf("%s: buffer full: %u > %u\n",
-//			stream->GetCodecName(), duration, period); warn = true; }
-//		Pop();
-		break;
+#if 0
+	if (GetDuration(duration) > period) {
+		SDL_CondSignal(cond_buffer_ready);
+		orpPrintf("%s: buffer full: %u > %u\n",
+			stream->GetCodecName(), duration, period);
 	}
+#endif
+	static Uint32 ac = 0, vc = 0, ad = 0, vd = 0;
+	Uint32 acf, vcf;
+	if (stream->GetType() == ST_AUDIO) {
+		ac = timestamp;
+		GetDuration(ad);
+		stream->GetSiblingClock(vc);
+		stream->GetSiblingDuration(vd);
+	} else {
+		vc = timestamp;
+		GetDuration(vd);
+		stream->GetSiblingClock(ac);
+		stream->GetSiblingDuration(ad);
+	}
+	double v = (double)vc / (double)90000;
+	double a = (double)ac / (double)90000;
+	orpPrintf("audio: %6u, video: %6u, a/v drift: %6.02f\r",
+		ad, vd, a - v);
 
 	SDL_LockMutex(lock);
 
 	pkt.push(packet);
 	clock = timestamp;
 	duration = UpdateDuration();
-	if (duration > period) SDL_CondSignal(cond_buffer_full);
+	if (duration > period) SDL_CondSignal(cond_buffer_ready);
 
 	SDL_UnlockMutex(lock);
 }
