@@ -334,17 +334,20 @@ public:
 	struct orpStreamPacket_t *Pop(void);
 
 	orpStreamBuffer *GetSibling(void) { return sibling; };
-	void Broadcast(void) { SDL_CondBroadcast(cond_buffer_full); };
+	void Broadcast(void) { SDL_CondBroadcast(cond_buffer_ready); };
 	Sint32 WaitOnBuffer(void) {
-		SDL_LockMutex(lock_buffer_full);
-		SDL_CondWait(cond_buffer_full, lock_buffer_full);
-		SDL_UnlockMutex(lock_buffer_full); };
+		SDL_LockMutex(lock_buffer_ready);
+		SDL_CondWait(cond_buffer_ready, lock_buffer_ready);
+		SDL_UnlockMutex(lock_buffer_ready); return 0; };
 
 	Uint32 GetClock(Uint32 &clock);
 	Uint32 GetDuration(Uint32 &duration);
 	Uint32 UpdateDuration(void);
-	bool IsBufferFull(void) {
+	bool IsBufferReady(void) {
 		if (GetDuration(duration) > period) return true;
+		return false; };
+	bool IsBufferEmpty(void) {
+		if (GetDuration(duration) == 0) return true;
 		return false; };
 
 	Uint32 len;
@@ -360,8 +363,8 @@ protected:
 	queue<struct orpStreamPacket_t *> pkt;
 	orpStreamBuffer *sibling;
 	SDL_mutex *lock;
-	SDL_cond *cond_buffer_full;
-	SDL_mutex *lock_buffer_full;
+	SDL_cond *cond_buffer_ready;
+	SDL_mutex *lock_buffer_ready;
 };
 
 class orpStreamBase
@@ -390,7 +393,9 @@ public:
 	orpStreamBase *GetSibling(void) { return sibling; };
 	orpStreamType GetSiblingType(void) { return sibling->GetType(); };
 	Uint32 GetClock(Uint32 &clock) { return buffer->GetClock(clock); };
+	Uint32 GetDuration(Uint32 &duration) { return buffer->GetDuration(duration); };
 	Uint32 GetSiblingClock(Uint32 &clock) { return sibling->GetClock(clock); };
+	Uint32 GetSiblingDuration(Uint32 &duration) { return sibling->GetDuration(duration); };
 
 	virtual Sint32 Connect(string host, Uint16 port, string url, string session_id);
 
