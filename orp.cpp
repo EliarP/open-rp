@@ -124,6 +124,7 @@ static struct orpHeader_t orpHeaderList[] = {
 	{ HEADER_EXEC_MODE, "PREMO-Exec-Mode" },
 	{ HEADER_MODE, "PREMO-Mode" },
 	{ HEADER_NONCE, "PREMO-Nonce" },
+	{ HEADER_OTA, "PREMO-OTA" },
 	{ HEADER_PAD_ASSIGN, "PREMO-Pad-Assign" },
 	{ HEADER_PAD_COMPLETE, "PREMO-Pad-Complete" },
 	{ HEADER_PAD_INDEX, "PREMO-Pad-Index" },
@@ -145,6 +146,7 @@ static struct orpHeader_t orpHeaderList[] = {
 	{ HEADER_VIDEO_CONFIG, "PREMO-Video-Config" },
 	{ HEADER_VIDEO_FRAMERATE, "PREMO-Video-Framerate" },
 	{ HEADER_VIDEO_FRAMERATE_ABILITY, "PREMO-Video-Framerate-Ability" },
+	{ HEADER_VIDEO_OUT_CTRL, "PREMO-VideoOut-Ctrl" },
 	{ HEADER_VIDEO_RESOLUTION, "PREMO-Video-Resolution" },
 	{ HEADER_VIDEO_RESOLUTION_ABILITY, "PREMO-Video-Resolution-Ability" },
 
@@ -482,8 +484,10 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 	fwrite(packet->pkt.data, 1, packet->pkt.size, _config->h_data);
 #endif
 #endif
+	packet->clock = SDL_Swap32(packet->header.clock);
+
 	// Push stream packet
-	Uint32 vc, ac, duration;
+	Uint32 vc, ac; //, duration;
 	if (stream->GetType() == ST_VIDEO) {
 #if 0
 		stream->GetBuffer()->GetDuration(duration);
@@ -503,8 +507,8 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 			SDL_Delay(delay);
 		}
 	}
-#if 0
 	else {
+#if 0
 		if (stream->GetSibling()->GetBuffer()->GetDuration(duration) == 0) {
 			SDL_PauseAudio(1);
 			orpPrintf("discarding audio frame: video buffer empty.\n");
@@ -513,15 +517,15 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 			return (size * nmemb);
 		}
 		if (stream->GetBuffer()->IsBufferReady()) SDL_PauseAudio(0);
-//		stream->GetSiblingClock(sc);
-//		if (SDL_Swap32(packet->header.clock) < sc) {
-//			orpPrintf("discarding audio frame: older than last video frame.\n");
-//			delete [] packet->pkt.data;
-//			delete packet;
-//			return (size * nmemb);
-//		}
-	}
+		stream->GetSiblingClock(vc);
+		if (packet->clock < vc) {
+			//orpPrintf("discarding audio frame: older than last video frame.\n");
+			delete [] packet->pkt.data;
+			delete packet;
+			return (size * nmemb);
+		}
 #endif
+	}
 	sb->Push(stream, packet);
 
 	return (size * nmemb);
@@ -545,6 +549,9 @@ static Sint32 orpThreadVideoDecode(void *_stream)
 	orpStreamBuffer *buffer = stream->GetBuffer();
 	struct orpView_t *view = stream->GetView();
 	Sint32 bytes_decoded, frame_done = 0;
+	Uint32 delay = 0, decode = 0;
+	Uint32 last_clock = 0;
+	Uint32 clock_freq = stream->GetClockFrequency();
 
 	AVFrame *frame = avcodec_alloc_frame();
 	if (!frame) {
@@ -553,16 +560,23 @@ static Sint32 orpThreadVideoDecode(void *_stream)
 	}
 
 	while (!stream->ShouldTerminate()) {
-		orpPrintf("Waiting on video buffer.\n");
 		if (buffer->WaitOnBuffer() != 0) {
 			orpPrintf("Error waiting on video buffer.\n");
 			return -1;
 		}
-		orpPrintf("Reading from video buffer.\n");
 		while (!stream->ShouldTerminate()) {
 			Uint32 ticks = SDL_GetTicks();
 			struct orpStreamPacket_t *packet = buffer->Pop();
 			if (!packet) break;
+
+			if (last_clock != 0) {
+				Uint32 interval = packet->clock - last_clock;
+				if (interval > 0) {
+					double diff = (double)interval / (double)clock_freq;
+					delay = (Uint32)(diff * (double)1000) - decode;
+					if ((Sint32)delay > 0) SDL_Delay(delay);
+				}
+			}
 
 			bytes_decoded = avcodec_decode_video2(
 				stream->GetContext(),
@@ -603,16 +617,17 @@ static Sint32 orpThreadVideoDecode(void *_stream)
 					SDL_BlitOverlay(view->status_yuv, &src,
 						view->overlay, &dst);
 				}
+
 				SDL_DisplayYUVOverlay(view->overlay, &rect);
 				SDL_UnlockMutex(view->lock);
 			}
 
+			last_clock = packet->clock;
 			delete [] packet->pkt.data;
 			delete packet;
 
-			Uint32 decode = SDL_GetTicks() - ticks;
-			Uint32 delay = stream->GetFrameDelay() - decode;
-			if ((Sint32)delay > 0) SDL_Delay(delay);
+			decode = SDL_GetTicks() - ticks;
+			if ((Sint32)delay > 0) decode -= delay;
 		}
 	}
 
@@ -707,12 +722,6 @@ static void orpCallbackAudioDecode(void *_stream, Uint8 *audio, int req_len)
 	orpStreamAudio *stream = (orpStreamAudio *)_stream;
 	orpStreamBuffer *buffer = stream->GetBuffer();
 
-	Uint32 duration;
-	if (buffer->GetDuration(duration) == 0) {
-		memset(audio, 0, req_len);
-		return;
-	}
-
 	struct orpStreamPacket_t *packet = buffer->Pop();
 	if (!packet) {
 		memset(audio, 0, req_len);
@@ -788,7 +797,8 @@ static Sint32 orpThreadAudioConnection(void *_stream)
 
 	os.str("");
 	os << orpGetHeader(HEADER_AUDIO_BITRATE);
-	os << ": " << "128000";
+	//os << ": " << "128000";
+	os << ": " << "576000";
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
@@ -836,39 +846,33 @@ orpStreamBuffer::~orpStreamBuffer()
 
 void orpStreamBuffer::Push(orpStreamBase *stream, struct orpStreamPacket_t *packet)
 {
-	Uint32 duration = 0;
-	Uint32 timestamp = SDL_Swap32(packet->header.clock);
-#if 0
-	if (GetDuration(duration) > period) {
-		SDL_CondSignal(cond_buffer_ready);
-		orpPrintf("%s: buffer full: %u > %u\n",
-			stream->GetCodecName(), duration, period);
-	}
-#endif
-	static Uint32 ac = 0, vc = 0, ad = 0, vd = 0;
-	Uint32 acf, vcf;
+	static Uint32 ac = 0, vc = 0, ad = 0, vd = 0, acf = 0, vcf = 0;
 	if (stream->GetType() == ST_AUDIO) {
-		ac = timestamp;
+		ac = packet->clock;
 		GetDuration(ad);
 		stream->GetSiblingClock(vc);
 		stream->GetSiblingDuration(vd);
+		if (acf == 0) acf = stream->GetClockFrequency();
+		if (vcf == 0) vcf = stream->GetSibling()->GetClockFrequency();
 	} else {
-		vc = timestamp;
+		vc = packet->clock;
 		GetDuration(vd);
 		stream->GetSiblingClock(ac);
 		stream->GetSiblingDuration(ad);
+		if (vcf == 0) vcf = stream->GetClockFrequency();
+		if (acf == 0) acf = stream->GetSibling()->GetClockFrequency();
 	}
-	double v = (double)vc / (double)90000;
-	double a = (double)ac / (double)90000;
+	double v = (double)vc / (double)vcf;
+	double a = (double)ac / (double)acf;
 	orpPrintf("audio: %6u, video: %6u, a/v drift: %6.02f\r",
 		ad, vd, a - v);
 
 	SDL_LockMutex(lock);
 
 	pkt.push(packet);
-	clock = timestamp;
+	clock = packet->clock;
 	duration = UpdateDuration();
-	if (duration > period) SDL_CondSignal(cond_buffer_ready);
+	SDL_CondSignal(cond_buffer_ready);
 
 	SDL_UnlockMutex(lock);
 }
@@ -908,11 +912,10 @@ Uint32 orpStreamBuffer::GetDuration(Uint32 &duration)
 
 Uint32 orpStreamBuffer::UpdateDuration(void)
 {
-	duration = 0;
-	if (pkt.size() > 1) {
-		duration = SDL_Swap32(pkt.back()->header.clock) -
-			SDL_Swap32(pkt.front()->header.clock);
-	}
+	if (pkt.size() < 2)
+		duration = 0;
+	else
+		duration = pkt.back()->clock - pkt.front()->clock;
 	return duration;
 }
 
@@ -2609,9 +2612,10 @@ Sint32 OpenRemotePlay::SessionControl(CURL *curl)
 
 			id++;
 			// TODO: This calculation is very approximate, needs to be fixed!
-			timestamp = (SDL_GetTicks() - ticks) / 16;	
+			timestamp = (SDL_GetTicks() - ticks) / 10;	
 
 			SendPadState(statePad, id, count, timestamp, headers);
+			//SendPadState(statePad, id, count, 0, headers);
 
 		} else if (kbmap_queue.size()) {
 			for (i = 0; i < kbmap_queue.size(); i++) {
@@ -2744,6 +2748,11 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 		os << ": " << "capable";
 		headers = curl_slist_append(headers, os.str().c_str());
 
+		os.str("");
+		os << orpGetHeader(HEADER_VIDEO_OUT_CTRL);
+		os << ": " << "capable";
+		headers = curl_slist_append(headers, os.str().c_str());
+
 		if (config.net_public) {
 			if (!(encoded = base64.Encode((const Uint8 *)config.psn_login)))
 				throw -1;
@@ -2863,10 +2872,11 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 		atoi(orpGetHeaderValue(HEADER_AUDIO_CHANNELS, headerList)));
 	stream_audio->SetSampleRate(
 		atoi(orpGetHeaderValue(HEADER_AUDIO_SAMPLERATE, headerList)));
-	stream_audio->SetBitRate(
-		atoi(orpGetHeaderValue(HEADER_AUDIO_BITRATE, headerList)));
+	stream_audio->SetBitRate(576000);
+		//atoi(orpGetHeaderValue(HEADER_AUDIO_BITRATE, headerList)));
 
 	stream_video = new orpStreamVideo(codec_video);
+	stream_video->SetView(&view);
 	stream_video->SetKeys(&config.key);
 	stream_video->SetClockFrequency(
 		atoi(orpGetHeaderValue(HEADER_VIDEO_CLOCKFREQ, headerList)));
@@ -2876,7 +2886,6 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 
 	stream_audio->SetSibling(stream_video);
 	stream_video->SetSibling(stream_audio);
-	stream_video->SetView(&view);
 
 	os.str("");
 	os << "http://";
