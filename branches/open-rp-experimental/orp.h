@@ -160,6 +160,7 @@ enum orpHeader {
 	HEADER_EXEC_MODE,
 	HEADER_MODE,
 	HEADER_NONCE,
+	HEADER_OTA,
 	HEADER_PAD_ASSIGN,
 	HEADER_PAD_COMPLETE,
 	HEADER_PAD_INDEX,
@@ -181,6 +182,7 @@ enum orpHeader {
 	HEADER_VIDEO_CONFIG,
 	HEADER_VIDEO_FRAMERATE,
 	HEADER_VIDEO_FRAMERATE_ABILITY,
+	HEADER_VIDEO_OUT_CTRL,
 	HEADER_VIDEO_RESOLUTION,
 	HEADER_VIDEO_RESOLUTION_ABILITY,
 };
@@ -310,6 +312,7 @@ struct orpStreamPacketHeader_t {
 };
 
 struct orpStreamPacket_t {
+	Uint32 clock;
 	struct orpStreamPacketHeader_t header;
 	AVPacket pkt;
 };
