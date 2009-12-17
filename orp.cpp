@@ -350,8 +350,8 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 	// We have a full audio/video packet (frame)
 	if (bp[0] != 0x80) {
 		orpPrintf("%s: invalid packet header\n", stream->GetCodecName());
-		delete [] buffer;
 		orpPostError("Invalid packet header!");
+		delete [] buffer;
 		return 0;
 	}
 
@@ -366,8 +366,8 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 	// Audio/video magic of 0x8081 seems to mean PS3 shutdown
 	if (bp[1] == 0x81) {
 		orpPrintf("%s: system power-off\n", stream->GetCodecName());
-		delete [] buffer;
 		orpPostEvent(EVENT_SHUTDOWN);
+		delete [] buffer;
 		return (size * nmemb);
 	}
 
@@ -830,7 +830,7 @@ static Sint32 orpThreadAudioConnection(void *_stream)
 }
 
 orpStreamBuffer::orpStreamBuffer()
-	: clock(0), lock(NULL), period(90000),
+	: clock(0), base(0), lock(NULL), period(90000),
 	len(0), pos(0), data(NULL), sibling(NULL)
 {
 	lock = SDL_CreateMutex();
@@ -862,10 +862,10 @@ void orpStreamBuffer::Push(orpStreamBase *stream, struct orpStreamPacket_t *pack
 		if (vcf == 0) vcf = stream->GetClockFrequency();
 		if (acf == 0) acf = stream->GetSibling()->GetClockFrequency();
 	}
-	double v = (double)vc / (double)vcf;
 	double a = (double)ac / (double)acf;
-	orpPrintf("audio: %6u, video: %6u, a/v drift: %6.02f\r",
-		ad, vd, a - v);
+	double v = (double)vc / (double)vcf;
+	orpPrintf("Stream: A: %5.1f V: %5.1f A-V: %7.03f\r",
+		a, v, a - v);
 
 	SDL_LockMutex(lock);
 
@@ -1270,10 +1270,10 @@ bool OpenRemotePlay::SessionCreate(void)
 
 	// Set window icon, must be done before setting video mode
 	SDL_RWops *rw;
-#ifdef _MACOSX_
-	if ((rw = SDL_RWFromConstMem(icon_osx_bmp, icon_osx_bmp_len))) {
-#else
+#ifndef _WIN32
 	if ((rw = SDL_RWFromConstMem(icon_bmp, icon_bmp_len))) {
+#else
+	if ((rw = SDL_RWFromConstMem(icon_w32_bmp, icon_w32_bmp_len))) {
 #endif
 		SDL_Surface *icon = IMG_Load_RW(rw, 0);
 		if (icon) {
@@ -1492,6 +1492,9 @@ bool OpenRemotePlay::SessionCreate(void)
 		if (result != EVENT_RESTORE) {
 			if (!terminate) DisplayError("Connection terminated!");
 			break;
+		} else {
+			orpPrintf("Waiting 5s for exec-mode switch.\n");
+			SDL_Delay(5000);
 		}
 		i = reply = first = 0;
 	}
@@ -2063,7 +2066,12 @@ Sint32 OpenRemotePlay::SessionControl(CURL *curl)
 			case EVENT_RESTORE:
 				orpPrintf("Restore event\n");
 				SDLNet_TCP_Close(skt_pad);
-				curl_easy_cleanup(curl);
+				if (curl) {
+					mode.mode = CTRL_SESSION_TERM;
+					ControlPerform(curl, &mode);
+					curl_easy_cleanup(curl);
+					curl = NULL;
+				}
 				return EVENT_RESTORE;
 			case EVENT_SHUTDOWN:
 				terminate = true;
@@ -2073,7 +2081,10 @@ Sint32 OpenRemotePlay::SessionControl(CURL *curl)
 			case EVENT_STREAM_EXIT:
 				orpPrintf("Stream exited\n");
 				SDLNet_TCP_Close(skt_pad);
-				curl_easy_cleanup(curl);
+				if (curl) {
+					curl_easy_cleanup(curl);
+					curl = NULL;
+				}
 				if (!terminate) return EVENT_RESTORE;
 				return EVENT_STREAM_EXIT;
 			}
@@ -2748,10 +2759,11 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 		os << ": " << "capable";
 		headers = curl_slist_append(headers, os.str().c_str());
 
-		os.str("");
-		os << orpGetHeader(HEADER_VIDEO_OUT_CTRL);
-		os << ": " << "capable";
-		headers = curl_slist_append(headers, os.str().c_str());
+		// PSP with video-out capability?
+		//os.str("");
+		//os << orpGetHeader(HEADER_VIDEO_OUT_CTRL);
+		//os << ": " << "capable";
+		//headers = curl_slist_append(headers, os.str().c_str());
 
 		if (config.net_public) {
 			if (!(encoded = base64.Encode((const Uint8 *)config.psn_login)))
@@ -2872,8 +2884,22 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 		atoi(orpGetHeaderValue(HEADER_AUDIO_CHANNELS, headerList)));
 	stream_audio->SetSampleRate(
 		atoi(orpGetHeaderValue(HEADER_AUDIO_SAMPLERATE, headerList)));
+
+	// XXX: This is interesting?  Setting the audio bit-rate to 576000 works,
+	// *but* it will cause the PS3 to crash (lock/unresponsive - even holding
+	// down power) when exiting the premo server module.  So if you try to
+	// launch a game, the PS3 will crash and can only be reset via the power
+	// supply switch.  The same thing happens if you turn the PS3 off via the
+	// Users menu, or by pressing circle on a PS3 controller/remote.  This bit-
+	// rate is never used by the/ PSP, where the highest client-side bit-rate
+	// is 128000.  See the header:
+	// PREMO-Audio-Bitrate-Ability
 	stream_audio->SetBitRate(576000);
-		//atoi(orpGetHeaderValue(HEADER_AUDIO_BITRATE, headerList)));
+	//stream_audio->SetBitRate(128000);
+
+	// Default:
+	//stream_audio->SetBitRate(
+	//	atoi(orpGetHeaderValue(HEADER_AUDIO_BITRATE, headerList)));
 
 	stream_video = new orpStreamVideo(codec_video);
 	stream_video->SetView(&view);
@@ -2893,6 +2919,8 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	os << ORP_GET_VIDEO;
 	if (stream_video->Connect(config.ps3_addr, config.ps3_port,
 		os.str(), session_id) != 0) return -1;
+
+	SDL_Delay(50);
 
 	os.str("");
 	os << "http://";

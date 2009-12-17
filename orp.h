@@ -361,6 +361,7 @@ protected:
 	friend class orpStreamBase;
 
 	Uint32 clock;
+	Uint32 base;
 	Uint32 duration;
 	Uint32 period;
 	queue<struct orpStreamPacket_t *> pkt;
