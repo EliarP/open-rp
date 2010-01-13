@@ -31,6 +31,8 @@
 #include "images.h"
 #include "font.h"
 
+static SDL_mutex *orpGlobalMutex = NULL;
+
 static void orpOutput(const char *format, va_list ap)
 {
 	static SDL_mutex *lock = NULL;
@@ -313,8 +315,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 	// Available data less than what we need?
 	if (len < chunk_len) {
 		// Undo buffer and length adjustments for next packet
-		len += 8; bp -= 8;
-		bp[6] = 0x0d;
+		len += 8; bp -= 8; bp[6] = 0x0d;
 
 		// Allocate memory to hold partial packet
 		sb->len = len;
@@ -411,7 +412,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 
 		// TODO: For now we just accept the header length over the
 		// chunk size.  This only seems to happen with MPEG4 video, ex:
-		// PixelJunk Monsers/Eden
+		// PixelJunk Monsters/Eden
 		packet->pkt.size = SDL_Swap16(packet->header.len);
 	}
 
@@ -435,7 +436,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 	bool video_key_frame = false;
 	struct orpKey_t *key = stream->GetKeys();
 #if 1
-	// Decrypt h2.64 video key-frames
+	// Decrypt h264 video key-frames
 	if ((packet->header.magic[1] == 0xff || packet->header.magic[1] == 0xfe)
 		&& packet->header.unk6 == 0x0401) {
 		video_key_frame = true;
@@ -504,7 +505,7 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 			double a = (double)ac / (double)stream->GetSibling()->GetClockFrequency();
 			Uint32 delay = (Uint32)((v - a) * 1000.0);
 			//orpPrintf("video clock ahead by: %.02fs, delay: %u\n", v - a, delay / 2);
-			SDL_Delay(delay);
+			//SDL_Delay(delay);
 		}
 	}
 	else {
@@ -531,26 +532,13 @@ static size_t orpParseStreamData(void *ptr, size_t size, size_t nmemb, void *_st
 	return (size * nmemb);
 }
 
-static bool orpDecodeKey(Uint8 *dst, const string &src)
-{
-	Base64 base64;
-	Uint8 *result = base64.Decode((const Uint8 *)src.c_str());
-	if (!result) return false;
-	memcpy(dst, result, ORP_KEY_LEN);
-	delete [] result;
-	return true;
-}
-
-static SDL_mutex *orpGlobalMutex = NULL;
-
 static Sint32 orpThreadVideoDecode(void *_stream)
 {
 	orpStreamVideo *stream = (orpStreamVideo *)_stream;
 	orpStreamBuffer *buffer = stream->GetBuffer();
 	struct orpView_t *view = stream->GetView();
 	Sint32 bytes_decoded, frame_done = 0;
-	Uint32 delay = 0, decode = 0;
-	Uint32 last_clock = 0;
+	Uint32 delay = 0, decode = 0, last_clock = 0;
 	Uint32 clock_freq = stream->GetClockFrequency();
 
 	AVFrame *frame = avcodec_alloc_frame();
@@ -797,8 +785,8 @@ static Sint32 orpThreadAudioConnection(void *_stream)
 
 	os.str("");
 	os << orpGetHeader(HEADER_AUDIO_BITRATE);
-	//os << ": " << "128000";
-	os << ": " << "576000";
+	os << ": " << "128000";
+	//os << ": " << "576000";
 	headers = curl_slist_append(headers, os.str().c_str());
 
 	os.str("");
@@ -864,8 +852,8 @@ void orpStreamBuffer::Push(orpStreamBase *stream, struct orpStreamPacket_t *pack
 	}
 	double a = (double)ac / (double)acf;
 	double v = (double)vc / (double)vcf;
-	orpPrintf("Stream: A: %5.1f V: %5.1f A-V: %7.03f\r",
-		a, v, a - v);
+	orpPrintf("Stream: A: %5.1f (%5u) V: %5.1f (%5u) A-V: %7.03f\r",
+		a, ad, v, vd, a - v);
 
 	SDL_LockMutex(lock);
 
@@ -1570,9 +1558,19 @@ bool OpenRemotePlay::CreateView(void)
 	return true;
 }
 
+bool OpenRemotePlay::DecodeKey(Uint8 *dst, const string &src)
+{
+	Base64 base64;
+	Uint8 *result = base64.Decode((const Uint8 *)src.c_str());
+	if (!result) return false;
+	memcpy(dst, result, ORP_KEY_LEN);
+	delete [] result;
+	return true;
+}
+
 bool OpenRemotePlay::CreateKeys(const string &nonce, enum orpAuthType type)
 {
-	if (!orpDecodeKey(config.key.nonce, nonce)) {
+	if (!DecodeKey(config.key.nonce, nonce)) {
 		orpPrintf("Error decoding nonce: %s\n", nonce.c_str());
 		return false;
 	}
@@ -2595,8 +2593,6 @@ Sint32 OpenRemotePlay::SessionControl(CURL *curl)
 			Uint16 value = (Uint16)(key & 0x0000ffff);
 
 			if (value == ORP_PAD_PSP_HOME) {
-				//orpDumpPadState(statePadHome);
-				//SDLNet_TCP_Send(skt_pad, statePadHome, ORP_PADSTATE_LEN);
 				SendPadState(statePadHome, 0, count, 0, headers);
 				continue;
 			}
@@ -2891,15 +2887,16 @@ Sint32 OpenRemotePlay::SessionPerform(void)
 	// launch a game, the PS3 will crash and can only be reset via the power
 	// supply switch.  The same thing happens if you turn the PS3 off via the
 	// Users menu, or by pressing circle on a PS3 controller/remote.  This bit-
-	// rate is never used by the/ PSP, where the highest client-side bit-rate
+	// rate is never used by the PSP, where the highest client-side bit-rate
 	// is 128000.  See the header:
 	// PREMO-Audio-Bitrate-Ability
-	stream_audio->SetBitRate(576000);
+
 	//stream_audio->SetBitRate(128000);
+	//stream_audio->SetBitRate(576000);
 
 	// Default:
-	//stream_audio->SetBitRate(
-	//	atoi(orpGetHeaderValue(HEADER_AUDIO_BITRATE, headerList)));
+	stream_audio->SetBitRate(
+		atoi(orpGetHeaderValue(HEADER_AUDIO_BITRATE, headerList)));
 
 	stream_video = new orpStreamVideo(codec_video);
 	stream_video->SetView(&view);
@@ -3022,7 +3019,6 @@ void OpenRemotePlay::DisplayError(const char *text)
 	SDL_UnlockMutex(view.lock);
 
 	SDL_Event event;
-	while (SDL_PollEvent(&event) > 0);
 	while (SDL_WaitEvent(&event) > 0) {
 		if (event.type == SDL_QUIT || (event.type == SDL_KEYDOWN &&
 			event.key.keysym.sym == SDLK_q &&
