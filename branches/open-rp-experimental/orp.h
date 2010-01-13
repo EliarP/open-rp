@@ -516,7 +516,8 @@ protected:
 	Uint32 rmask, gmask, bmask, amask;
 
 	bool CreateView(void);
-	bool CreateKeys(const string &nonce,	
+	bool DecodeKey(Uint8 *dst, const string &src);
+	bool CreateKeys(const string &nonce,
 		enum orpAuthType type = orpAUTH_NORMAL);
 	bool SetCaption(const char *caption);
 	struct orpCodec_t *GetCodec(const string &name);
