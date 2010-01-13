@@ -1,6 +1,5 @@
 -include ../Config.mak
-REVISION=$(shell svn info https://open-rp.googlecode.com/svn/trunk | grep Revision | cut -d: -f2)
-VERSION="v$(VER_MAJOR).$(VER_MINOR) $(VER_RELEASE)$(REVISION)"
+VERSION="v$(VER_MAJOR).$(VER_MINOR) $(VER_RELEASE)"
 
 all:
 	@pbmtext -font ter-u16b.bdf -nomargins $(VERSION) > version.pbm
@@ -9,7 +8,7 @@ all:
 	@echo "#ifndef _IMAGES_H" > ../images.h
 	@echo "#define _IMAGES_H" >> ../images.h
 	xxd -i icon.bmp >> ../images.h
-	xxd -i icon-osx.bmp >> ../images.h
+	xxd -i icon-w32.bmp >> ../images.h
 	xxd -i error.png >> ../images.h
 	xxd -i splash-version.png >> ../images.h
 	xxd -i mode_game.png >> ../images.h
