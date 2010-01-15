@@ -42,6 +42,9 @@ Apparently this does work with the !AirPort interface (en1), but you have to dis
 For Windows, apparently you can use this (thanks mechos):
   http://www.technitium.com/tmac/index.html
 
+Another Windows MAC address changer, apparently works with Windows 7 (thanks UK_Robbie):
+  http://www.voidnish.com/articles/ShowArticle.aspx?code=MacIdChanger
+
 ===How Do I Build ORP for Windows?===
 
 Read the following guide: WindowsBuildGuide
