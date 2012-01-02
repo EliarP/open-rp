@@ -1,5 +1,0 @@
-#summary Downloads
-
-= Downloads =
-
-No binary downloads are currently available.
