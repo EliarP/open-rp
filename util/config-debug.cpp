@@ -26,7 +26,7 @@
 #ifndef ORP_CONFIG_DEBUG
 #error "ORP_CONFIG_DEBUG not defined."
 #endif
-#include "orp-conf.h"
+#include "config.h"
 
 using namespace std;
 

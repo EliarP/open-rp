@@ -21,10 +21,6 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -44,7 +40,7 @@ static void orpOutput(const char *format, va_list ap)
 	static FILE *log = NULL;
 	if (!log) {
 		log = fopen("orp.log", "w");
-		if (log) fprintf(log, "Open Remote Play v%s\n", PACKAGE_VERSION);
+		if (log) fprintf(log, "Open Remote Play v%s\n", ORP_VERSION);
 	}
 	if (log) {
 		va_list ap2;
@@ -1226,14 +1222,8 @@ OpenRemotePlay::OpenRemotePlay(struct orpConfig_t *config)
 
 	codec = avcodec_find_decoder_by_name("libfaad");
 	if (!codec) {
-		orpPrintf("Warning, preferred codec not found: %s,"
-			" trying built-in AAC support (may not work)\n",
-			"CODEC_ID_AAC (libfaad)");
-		codec = avcodec_find_decoder(CODEC_ID_AAC);
-		if (!codec) {
-			orpPrintf("Required codec not found: %s\n", "CODEC_ID_AAC");
-			throw -1;
-		}
+		orpPrintf("Required codec not found: %s\n", "CODEC_ID_AAC (libfaad)");
+		throw -1;
 	}
 	oc = new struct orpCodec_t;
 	oc->name = "M4A";

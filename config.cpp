@@ -21,14 +21,10 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
-#ifdef HAVE_CONFIG_H
 #include "config.h"
-#endif
-
-#include "orp-conf.h"
 
 #ifndef ORP_PSP
-#include <SDL/SDL_endian.h>
+#include <SDL_endian.h>
 #endif
 
 #if defined(ORP_PSP) || SDL_BYTEORDER == SDL_LIL_ENDIAN
